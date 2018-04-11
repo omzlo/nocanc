@@ -1,0 +1,6 @@
+.*.swp
+cmd/nocanc
+*.dat
+.DS_Store
+*.hex
+*.o
