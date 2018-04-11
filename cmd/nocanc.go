@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/omzlo/goblynk"
+	"github.com/omzlo/nocanc/intelhex"
+	"github.com/omzlo/nocand/models/device"
+	"github.com/omzlo/nocand/models/nocan"
+	"github.com/omzlo/nocand/socket"
 	"os"
-	"pannetrat.com/goblynk/blynk"
-	"pannetrat.com/nocanc/intelhex"
-	"pannetrat.com/nocand/models/device"
-	"pannetrat.com/nocand/models/nocan"
-	"pannetrat.com/nocand/socket"
 	"strconv"
 	"strings"
 	"time"
@@ -50,9 +50,9 @@ var (
 	OptEventServerAddress string
 	OptAuthKey            string
 	OptSizeLimit          uint
-    //OptOnUpdate           bool
-	OptBlynkReaders       BlynkMap
-	OptBlynkWriters       BlynkMap
+	//OptOnUpdate           bool
+	OptBlynkReaders BlynkMap
+	OptBlynkWriters BlynkMap
 )
 
 func NewFlagSet(cmd string) *flag.FlagSet {
@@ -245,15 +245,15 @@ func list_nodes_cmd(args []string) error {
 }
 
 func read_channel_cmd(args []string) error {
-    fs := NewFlagSet("read-channel")
+	fs := NewFlagSet("read-channel")
 
-    //fs.BoolVar(&OptOnUpdate, "on-update", false, "wait until channel is updated instead of returning last value immediately")
+	//fs.BoolVar(&OptOnUpdate, "on-update", false, "wait until channel is updated instead of returning last value immediately")
 
-    if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-    args = fs.Args()
+	args = fs.Args()
 
 	if len(args) != 1 {
 		return fmt.Errorf("read-channel command has one argument, %d were provided", len(args))
@@ -270,33 +270,33 @@ func read_channel_cmd(args []string) error {
 	if err = conn.Subscribe(sl); err != nil {
 		return err
 	}
-    /*
-    if !OptOnUpdate {
-    */
-        if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(channelName,0xFFFF)); err != nil {
-            return err
-        }
-    /*
-    }
-    */
+	/*
+	   if !OptOnUpdate {
+	*/
+	if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(channelName, 0xFFFF)); err != nil {
+		return err
+	}
+	/*
+	   }
+	*/
 
-    for {
-	    value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+	for {
+		value, err := conn.WaitFor(socket.ChannelUpdateEvent)
 
-	    if err != nil {
-		    return err
-	    }
+		if err != nil {
+			return err
+		}
 
-	    var cu socket.ChannelUpdate
-        if err = cu.UnpackValue(value); err != nil {
-            return err
-        }
-        if cu.Name == channelName {
-            fmt.Println(cu)
-            break
-        }
-        fmt.Println("# Channel update ignored: <%s>", cu)
-    }
+		var cu socket.ChannelUpdate
+		if err = cu.UnpackValue(value); err != nil {
+			return err
+		}
+		if cu.Name == channelName {
+			fmt.Println(cu)
+			break
+		}
+		fmt.Println("# Channel update ignored: <%s>", cu)
+	}
 	return nil
 }
 
@@ -501,7 +501,7 @@ var help_text = [...]string{
 	"monitor [options]                          - Monitor all events",
 	"monitor [options] <eid1> <eid2> ...        - Monitor selected event by eid",
 	"publish [options] <channel_name> <value>   - Publish <value> to <channel_name>",
-    "read-channel [options] <channel_name>      - Read the content of a channel",
+	"read-channel [options] <channel_name>      - Read the content of a channel",
 	"list-channels [options]                    - List all channels",
 	"list-nodes [options]                       - List all nodes",
 	"upload [options] <filename> <node_id>      - Upload firmware to node",
@@ -539,8 +539,8 @@ func main() {
 		err = publish_cmd(os.Args[2:])
 	case "list-channels":
 		err = list_channels_cmd(os.Args[2:])
-    case "read-channel":
-		err = read_channel_cmd(os.Args[2:]) 
+	case "read-channel":
+		err = read_channel_cmd(os.Args[2:])
 	case "list-nodes":
 		err = list_nodes_cmd(os.Args[2:])
 	case "download":

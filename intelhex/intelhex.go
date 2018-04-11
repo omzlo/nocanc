@@ -4,8 +4,8 @@ import (
 	"bufio"
 	"encoding/hex"
 	"fmt"
+	"github.com/omzlo/nocand/clog"
 	"io"
-	"pannetrat.com/nocand/clog"
 )
 
 const (
