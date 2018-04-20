@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/omzlo/goblynk"
+	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/nocan"
@@ -47,9 +48,9 @@ func (bl *BlynkMap) String() string {
 }
 
 var (
-	OptEventServerAddress string
-	OptAuthKey            string
-	OptSizeLimit          uint
+	//OptEventServerAddress string
+	//OptAuthKey            string
+	OptSizeLimit uint
 	//OptOnUpdate           bool
 	OptBlynkReaders BlynkMap
 	OptBlynkWriters BlynkMap
@@ -57,12 +58,8 @@ var (
 
 func NewFlagSet(cmd string) *flag.FlagSet {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	if len(os.Getenv("NOCAN_EVENT_SERVER")) > 0 {
-		fs.StringVar(&OptEventServerAddress, "event-server", os.Getenv("NOCAN_EVENT_SERVER"), "Address of event server")
-	} else {
-		fs.StringVar(&OptEventServerAddress, "event-server", ":4242", "Address of event server")
-	}
-	fs.StringVar(&OptAuthKey, "auth-key", "password", "Authentication key")
+	fs.StringVar(&config.Settings.EventServer, "event-server", config.Settings.EventServer, "Address of event server")
+	fs.StringVar(&config.Settings.AuthToken, "auth-key", config.Settings.AuthToken, "Authentication key")
 	return fs
 }
 
@@ -87,7 +84,7 @@ func monitor_cmd(args []string) error {
 			sl.Add(socket.EventId(i))
 		}
 	}
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -130,7 +127,7 @@ func publish_cmd(args []string) error {
 	channelName := args[0]
 	channelValue := args[1]
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -151,7 +148,7 @@ func blynk_cmd(args []string) error {
 
 	args = fs.Args()
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -178,7 +175,7 @@ func list_channels_cmd(args []string) error {
 		return err
 	}
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -215,7 +212,7 @@ func list_nodes_cmd(args []string) error {
 		return err
 	}
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -260,7 +257,7 @@ func read_channel_cmd(args []string) error {
 	}
 	channelName := args[0]
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -340,7 +337,7 @@ func upload_cmd(args []string) error {
 		}
 	}
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -421,7 +418,7 @@ func download_cmd(args []string) error {
 	}
 	defer file.Close()
 
-	conn, err := socket.Dial(OptEventServerAddress, OptAuthKey)
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		return err
 	}
@@ -523,12 +520,12 @@ func help() {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Printf("%s: Missing command\n", os.Args[0])
+		fmt.Printf("# %s: Missing command\n", os.Args[0])
 		help()
 		os.Exit(-2)
 	}
 
-	//device.LoadDecoders()
+	config.Load()
 
 	var err error
 
