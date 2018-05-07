@@ -9,6 +9,7 @@ import (
 	"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -508,23 +509,26 @@ var help_text = [...]string{
 	"  -auth-key <auth key value>               - Server authentication key",
 }
 
-func help() {
-	fmt.Printf("Valid commands are 'monitor', 'publish', 'list-channels', 'list-nodes', 'download-firmware'  and 'upload-firmware'\n")
+func help(w io.Writer) {
+	fmt.Fprintf(w, "Valid commands are 'monitor', 'publish', 'list-channels', 'list-nodes', 'download-firmware'  and 'upload-firmware'\n")
 	for _, l := range help_text {
-		fmt.Println("  " + l)
+		fmt.Fprintln(w, "  "+l)
 	}
 }
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Printf("# %s: Missing command\n", os.Args[0])
-		help()
+		fmt.Fprintf(os.Stderr, "# %s: Missing command\n", os.Args[0])
+		help(os.Stderr)
 		os.Exit(-2)
 	}
 
-	config.Load()
+	err := config.Load()
 
-	var err error
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\n", err)
+		os.Exit(-2)
+	}
 
 	switch os.Args[1] {
 	case "monitor":
@@ -545,12 +549,16 @@ func main() {
 		err = reboot_cmd(os.Args[2:])
 	case "blynk":
 		err = blynk_cmd(os.Args[2:])
+	case "help":
+		err = nil
+		help(os.Stdout)
 	default:
-		fmt.Printf("%s: Unrecognized command '%s'\n", os.Args[0], os.Args[1])
-		help()
+		fmt.Fprintf(os.Stderr, "%s: Unrecognized command '%s'\n", os.Args[0], os.Args[1])
+		help(os.Stderr)
 		os.Exit(-2)
 	}
 	if err != nil {
-		fmt.Printf("Error: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(-1)
 	}
 }
