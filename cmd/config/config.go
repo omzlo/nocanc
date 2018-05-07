@@ -20,7 +20,8 @@ func Load() error {
 	fn, err := helpers.LocateDotFile("nocanc.conf")
 
 	if err != nil {
-		return err
+		// no config file found, continue normally.
+		return nil
 	}
 
 	if _, err := toml.DecodeFile(fn, &Settings); err != nil {
