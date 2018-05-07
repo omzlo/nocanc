@@ -48,10 +48,7 @@ func (bl *BlynkMap) String() string {
 }
 
 var (
-	//OptEventServerAddress string
-	//OptAuthKey            string
-	OptSizeLimit uint
-	//OptOnUpdate           bool
+	OptSizeLimit    uint
 	OptBlynkReaders BlynkMap
 	OptBlynkWriters BlynkMap
 )
@@ -59,7 +56,7 @@ var (
 func NewFlagSet(cmd string) *flag.FlagSet {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	fs.StringVar(&config.Settings.EventServer, "event-server", config.Settings.EventServer, "Address of event server")
-	fs.StringVar(&config.Settings.AuthToken, "auth-key", config.Settings.AuthToken, "Authentication key")
+	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.Settings.AuthToken, "Authentication key")
 	return fs
 }
 
