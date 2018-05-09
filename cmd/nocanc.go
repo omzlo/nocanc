@@ -11,6 +11,7 @@ import (
 	"github.com/omzlo/nocand/socket"
 	"os"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -19,7 +20,8 @@ import (
 /***/
 
 var (
-	OptSizeLimit uint
+	NOCANC_VERSION string = "Undefined"
+	OptSizeLimit   uint
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -484,6 +486,11 @@ func reboot_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+func version_cmd(fs *flag.FlagSet) error {
+	fmt.Printf("nocanc version %s-%s-%s\r\n", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
+	return nil
+}
+
 func help_cmd(fs *flag.FlagSet) error {
 	xargs := fs.Args()
 
@@ -515,32 +522,6 @@ func help_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
-/*
-var help_text = [...]string{
-	"monitor [options]                          - Monitor all events",
-	"monitor [options] <eid1> <eid2> ...        - Monitor selected event by eid",
-	"publish [options] <channel_name> <value>   - Publish <value> to <channel_name>",
-	"read-channel [options] <channel_name>      - Read the content of a channel",
-	"list-channels [options]                    - List all channels",
-	"list-nodes [options]                       - List all nodes",
-	"upload [options] <filename> <node_id>      - Upload firmware to node",
-	"download [options] <filename> <node_id>    - Download firmware from node",
-	"reboot [options] <node_id>                 - Reboot node",
-	"",
-	"[options] include:",
-	"  -event-server <server_address>           - Sever address",
-	"                                             (default localhost:4242)",
-	"  -auth-key <auth key value>               - Server authentication key",
-}
-
-func help(w io.Writer) {
-	fmt.Fprintf(w, "Valid commands are 'monitor', 'publish', 'list-channels', 'list-nodes', 'download-firmware'  and 'upload-firmware'\n")
-	for _, l := range help_text {
-		fmt.Fprintln(w, "  "+l)
-	}
-}
-*/
-
 type CommandDescriptor struct {
 	command   string
 	processor func(*flag.FlagSet) error
@@ -560,6 +541,7 @@ var Commands = []*CommandDescriptor{
 	{"read-channel", read_channel_cmd, BaseFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
 	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
+	{"version", version_cmd, EmptyFlagSet, "version", "display the version"},
 }
 
 func FindCommandMatches(cmd string) []*CommandDescriptor {
@@ -575,9 +557,12 @@ func FindCommandMatches(cmd string) []*CommandDescriptor {
 }
 
 func main() {
+
+	progname := path.Base(os.Args[0])
+
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "# %s: Missing command\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "# type `%s help` for usage", os.Args[0])
+		fmt.Fprintf(os.Stderr, "# %s: Missing command\n", progname)
+		fmt.Fprintf(os.Stderr, "# type `%s help` for usage", progname)
 		os.Exit(-2)
 	}
 
@@ -590,11 +575,11 @@ func main() {
 
 	command := FindCommandMatches(os.Args[1])
 	if len(command) == 0 {
-		fmt.Fprintf(os.Stderr, "# Unknown command '%s', type '%s help' for a list of valid commands", os.Args[1], os.Args[0])
+		fmt.Fprintf(os.Stderr, "# Unknown command '%s', type '%s help' for a list of valid commands", os.Args[1], progname)
 		os.Exit(-2)
 	}
 	if len(command) > 1 {
-		fmt.Fprintf(os.Stderr, "# Ambiguous command '%s', type '%s help' for a list of valid commands", os.Args[1], os.Args[0])
+		fmt.Fprintf(os.Stderr, "# Ambiguous command '%s', type '%s help' for a list of valid commands", os.Args[1], progname)
 		os.Exit(-2)
 	}
 
@@ -603,7 +588,7 @@ func main() {
 	fs = command[0].flags(command[0].command)
 	if err = fs.Parse(os.Args[2:]); err != nil {
 		fmt.Fprintf(os.Stderr, "# %s", err)
-		fmt.Fprintf(os.Stderr, "# type '%s help %s' for a list of valid options", os.Args[0], os.Args[1])
+		fmt.Fprintf(os.Stderr, "# type '%s help %s' for a list of valid options", progname, os.Args[1])
 		os.Exit(-2)
 	}
 
