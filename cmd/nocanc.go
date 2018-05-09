@@ -126,7 +126,8 @@ func blynk_cmd(fs *flag.FlagSet) error {
 
 	client := blynk.NewClient(config.Settings.Blynk.BlynkServer, config.Settings.Blynk.BlynkToken)
 
-	for _, writer := range config.Settings.Blynk.Writers.List {
+	fmt.Fprintf(os.Stderr, "There are %d blynk writers.\r\n", len(config.Settings.Blynk.Writers))
+	for _, writer := range config.Settings.Blynk.Writers {
 		client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
@@ -134,7 +135,9 @@ func blynk_cmd(fs *flag.FlagSet) error {
 			}
 		})
 	}
-	if len(config.Settings.Blynk.Readers.List) > 0 {
+
+	fmt.Fprintf(os.Stderr, "There are %d blynk readers.\r\n", len(config.Settings.Blynk.Readers))
+	if len(config.Settings.Blynk.Readers) > 0 {
 		pin_to_channel = make(map[uint]string)
 		name_to_channel = make(map[string]*socket.ChannelUpdate)
 
@@ -161,7 +164,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 			}
 		}()
 
-		for _, reader := range config.Settings.Blynk.Readers.List {
+		for _, reader := range config.Settings.Blynk.Readers {
 			pin_to_channel[reader.Pin] = reader.Channel
 
 			if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(reader.Channel, 0xFFFF)); err != nil {

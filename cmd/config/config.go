@@ -29,16 +29,16 @@ func (ba *BlynkAssoc) Set(s string) error {
 
 }
 
+/*
 func (ba *BlynkAssoc) UnmarshalText(text []byte) error {
 	return ba.Set(string(text))
 }
+*/
 
-type BlynkMap struct {
-	List []BlynkAssoc
-}
+type BlynkMap []BlynkAssoc
 
 func (bl *BlynkMap) Set(s string) error {
-	bl.List = nil
+	*bl = nil
 
 	v := strings.Split(s, ",")
 	for _, item := range v {
@@ -47,7 +47,7 @@ func (bl *BlynkMap) Set(s string) error {
 		if err := ba.Set(item); err != nil {
 			return err
 		}
-		bl.List = append(bl.List, ba)
+		*bl = append(*bl, ba)
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func (bl *BlynkMap) Set(s string) error {
 func (bl *BlynkMap) String() string {
 	var s []string
 
-	for _, item := range bl.List {
+	for _, item := range *bl {
 		s = append(s, fmt.Sprintf("%i:%s", item.Pin, item.Channel))
 	}
 	return strings.Join(s, ",")
@@ -64,16 +64,16 @@ func (bl *BlynkMap) String() string {
 /***/
 
 type BlynkConfiguration struct {
-	BlynkServer string `toml:blynk_server`
-	BlynkToken  string `toml:blynk_token`
-	Readers     BlynkMap
-	Writers     BlynkMap
+	BlynkServer string   `toml:"blynk-server"`
+	BlynkToken  string   `toml:"blynk-token"`
+	Readers     BlynkMap `toml:"readers"`
+	Writers     BlynkMap `toml:"writers"`
 }
 
 type Configuration struct {
-	EventServer       string `toml:event_server`
-	AuthToken         string `toml:auth_token`
-	DownloadSizeLimit uint   `toml:download_size_limit`
+	EventServer       string `toml:"event-server"`
+	AuthToken         string `toml:"auth-token"`
+	DownloadSizeLimit uint   `toml:"download-size-limit"`
 	Blynk             BlynkConfiguration
 }
 
