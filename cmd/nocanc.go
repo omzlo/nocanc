@@ -117,8 +117,7 @@ func publish_cmd(fs *flag.FlagSet) error {
 }
 
 func blynk_cmd(fs *flag.FlagSet) error {
-	var pin_to_channel map[uint]string
-	var name_to_channel map[string]*socket.ChannelUpdate
+	var channel_to_pin map[string]uint
 
 	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
@@ -141,49 +140,47 @@ func blynk_cmd(fs *flag.FlagSet) error {
 
 	fmt.Fprintf(os.Stderr, "There are %d blynk readers.\r\n", len(config.Settings.Blynk.Readers))
 	if len(config.Settings.Blynk.Readers) > 0 {
-		pin_to_channel = make(map[uint]string)
-		name_to_channel = make(map[string]*socket.ChannelUpdate)
+		channel_to_pin = make(map[string]uint)
 
 		sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
 		if err = conn.Subscribe(sl); err != nil {
 			return err
 		}
 
-		go func() {
-			for {
-				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+		client.OnConnect(func(c uint) error {
+			if c == 1 {
+				for _, reader := range config.Settings.Blynk.Readers {
+					channel_to_pin[reader.Channel] = reader.Pin
 
-				if err != nil {
-					return
-				}
-
-				cu := new(socket.ChannelUpdate)
-
-				if err = cu.UnpackValue(value); err != nil {
-					return
-				}
-
-				name_to_channel[cu.Name] = cu
-			}
-		}()
-
-		for _, reader := range config.Settings.Blynk.Readers {
-			pin_to_channel[reader.Pin] = reader.Channel
-
-			if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(reader.Channel, 0xFFFF)); err != nil {
-				return err
-			}
-
-			client.RegisterDeviceReaderFunction(reader.Pin, func(pin uint, body *blynk.Body) {
-				channel_name := pin_to_channel[pin]
-				if channel_name != "" {
-					cu := name_to_channel[channel_name]
-					if cu != nil {
-						body.PushString(string(cu.Value))
+					if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(reader.Channel, 0xFFFF)); err != nil {
+						return err
 					}
 				}
-			})
-		}
+
+				go func() {
+					for {
+						value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+
+						if err != nil {
+							return
+						}
+
+						cu := new(socket.ChannelUpdate)
+
+						if err = cu.UnpackValue(value); err != nil {
+							return
+						}
+
+						vpin, ok := channel_to_pin[cu.Name]
+						if ok {
+							client.VirtualWrite(vpin, string(cu.Value))
+						}
+					}
+				}()
+			}
+			return nil
+		})
+
 	}
 	client.Run()
 	return nil
