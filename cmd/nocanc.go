@@ -129,7 +129,8 @@ func blynk_cmd(fs *flag.FlagSet) error {
 	client := blynk.NewClient(config.Settings.Blynk.BlynkServer, config.Settings.Blynk.BlynkToken)
 
 	fmt.Fprintf(os.Stderr, "There are %d blynk writers.\r\n", len(config.Settings.Blynk.Writers))
-	for _, writer := range config.Settings.Blynk.Writers {
+	for _, it_writer := range config.Settings.Blynk.Writers {
+		writer := it_writer
 		client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
@@ -561,25 +562,25 @@ func main() {
 	progname := path.Base(os.Args[0])
 
 	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "# %s: Missing command\n", progname)
-		fmt.Fprintf(os.Stderr, "# type `%s help` for usage", progname)
+		fmt.Fprintf(os.Stderr, "# %s: Missing command\r\n", progname)
+		fmt.Fprintf(os.Stderr, "# type `%s help` for usage\r\n", progname)
 		os.Exit(-2)
 	}
 
 	err := config.Load()
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\r\n", err)
 		os.Exit(-2)
 	}
 
 	command := FindCommandMatches(os.Args[1])
 	if len(command) == 0 {
-		fmt.Fprintf(os.Stderr, "# Unknown command '%s', type '%s help' for a list of valid commands", os.Args[1], progname)
+		fmt.Fprintf(os.Stderr, "# Unknown command '%s', type '%s help' for a list of valid commands\r\n", os.Args[1], progname)
 		os.Exit(-2)
 	}
 	if len(command) > 1 {
-		fmt.Fprintf(os.Stderr, "# Ambiguous command '%s', type '%s help' for a list of valid commands", os.Args[1], progname)
+		fmt.Fprintf(os.Stderr, "# Ambiguous command '%s', type '%s help' for a list of valid commands\r\n", os.Args[1], progname)
 		os.Exit(-2)
 	}
 
@@ -587,14 +588,14 @@ func main() {
 
 	fs = command[0].flags(command[0].command)
 	if err = fs.Parse(os.Args[2:]); err != nil {
-		fmt.Fprintf(os.Stderr, "# %s", err)
-		fmt.Fprintf(os.Stderr, "# type '%s help %s' for a list of valid options", progname, os.Args[1])
+		fmt.Fprintf(os.Stderr, "# %s\r\n", err)
+		fmt.Fprintf(os.Stderr, "# type '%s help %s' for a list of valid options\r\n", progname, os.Args[1])
 		os.Exit(-2)
 	}
 
 	if command[0].processor != nil {
 		if err = command[0].processor(fs); err != nil {
-			fmt.Fprintf(os.Stderr, "# %s failed: %s", command[0].command, err)
+			fmt.Fprintf(os.Stderr, "# %s failed: %s\r\n", command[0].command, err)
 			os.Exit(-1)
 		}
 	} else {

@@ -35,14 +35,14 @@ func (ba *BlynkAssoc) UnmarshalText(text []byte) error {
 }
 */
 
-type BlynkMap []BlynkAssoc
+type BlynkMap []*BlynkAssoc
 
 func (bl *BlynkMap) Set(s string) error {
 	*bl = nil
 
 	v := strings.Split(s, ",")
 	for _, item := range v {
-		var ba BlynkAssoc
+		ba := new(BlynkAssoc)
 
 		if err := ba.Set(item); err != nil {
 			return err
