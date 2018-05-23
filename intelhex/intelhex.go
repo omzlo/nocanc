@@ -161,12 +161,6 @@ func (hex *IntelHex) Save(w io.Writer) error {
 
 	for _, block := range hex.Blocks {
 
-		if extended_address != (block.Address >> 16) {
-			extended_address = (block.Address >> 16)
-			checksum = ^(0x02 + 0x00 + 0x00 + 0x04 + uint8(extended_address>>8) + uint8(extended_address&0xFF)) + 1
-			fmt.Fprintf(w, ":02000004%02X%02X%02X\n", (extended_address >> 8), (extended_address & 0xFF), checksum)
-		}
-
 		var pos uint32 = 0
 		var length uint32 = uint32(len(block.Data))
 		for pos < length {
@@ -174,6 +168,12 @@ func (hex *IntelHex) Save(w io.Writer) error {
 			var i uint32
 
 			address := block.Address + pos
+
+			if extended_address != (address >> 16) {
+				extended_address = (address >> 16)
+				checksum = ^(0x02 + 0x00 + 0x00 + 0x04 + uint8(extended_address>>8) + uint8(extended_address&0xFF)) + 1
+				fmt.Fprintf(w, ":02000004%02X%02X%02X\n", (extended_address >> 8), (extended_address & 0xFF), checksum)
+			}
 
 			if length-pos < 16 {
 				blen = uint8(length - pos)

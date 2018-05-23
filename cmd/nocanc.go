@@ -21,7 +21,6 @@ import (
 
 var (
 	NOCANC_VERSION string = "Undefined"
-	OptSizeLimit   uint
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -376,11 +375,11 @@ func upload_cmd(fs *flag.FlagSet) error {
 				if dur == 0 {
 					dur = 1
 				}
-				fmt.Printf("\rProgress: %d%%, %d bytes, %d bps", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
+				fmt.Printf("\rProgress: %d%%, %d bytes, %d bps.", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
 			}
 
 		default:
-			return fmt.Errorf("Unexpected event (eid=%d)", eid)
+			return fmt.Errorf("\nUnexpected event (eid=%d)", eid)
 		}
 
 	}
@@ -419,7 +418,7 @@ func download_cmd(fs *flag.FlagSet) error {
 	}
 
 	download_request := socket.NewNodeFirmware(nocan.NodeId(nodeid), true)
-	download_request.Limit = uint32(OptSizeLimit)
+	download_request.Limit = uint32(config.Settings.DownloadSizeLimit)
 
 	if err = conn.Put(socket.NodeFirmwareDownloadRequestEvent, download_request); err != nil {
 		return err
@@ -443,9 +442,9 @@ func download_cmd(fs *flag.FlagSet) error {
 
 			switch np.Progress {
 			case socket.ProgressSuccess:
-				fmt.Printf("\nDone\n")
+				fmt.Printf("\nDownload succeeded\n")
 			case socket.ProgressFailed:
-				fmt.Printf("\nFailed\n")
+				fmt.Printf("\nDownload failed\n")
 				return fmt.Errorf("Download failed")
 			default:
 				dur := uint32(time.Since(start).Seconds())
@@ -464,6 +463,7 @@ func download_cmd(fs *flag.FlagSet) error {
 			if nf.Id == nocan.NodeId(nodeid) {
 				ihex := intelhex.New()
 				for _, block := range nf.Code {
+					fmt.Printf("Saving block of %d bytes, with offset 0x%x\n", len(block.Data), block.Offset)
 					ihex.Add(intelhex.DataRecord, block.Offset, block.Data)
 				}
 				if err := ihex.Save(file); err != nil {
