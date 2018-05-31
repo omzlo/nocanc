@@ -52,22 +52,34 @@ func (bl *BlynkMap) Set(s string) error {
 	return nil
 }
 
-func (bl *BlynkMap) String() string {
+func (bl BlynkMap) String() string {
 	var s []string
 
-	for _, item := range *bl {
+	for _, item := range bl {
 		s = append(s, fmt.Sprintf("%i:%s", item.Pin, item.Channel))
 	}
 	return strings.Join(s, ",")
 }
 
+type BlynkList []string
+
+func (bl *BlynkList) Set(s string) error {
+	*bl = strings.Split(s, ",")
+	return nil
+}
+
+func (bl BlynkList) String() string {
+	return strings.Join(bl, ",")
+}
+
 /***/
 
 type BlynkConfiguration struct {
-	BlynkServer string   `toml:"blynk-server"`
-	BlynkToken  string   `toml:"blynk-token"`
-	Readers     BlynkMap `toml:"readers"`
-	Writers     BlynkMap `toml:"writers"`
+	BlynkServer string    `toml:"blynk-server"`
+	BlynkToken  string    `toml:"blynk-token"`
+	Readers     BlynkMap  `toml:"readers"`
+	Writers     BlynkMap  `toml:"writers"`
+	Notifiers   BlynkList `toml:"notifiers"`
 }
 
 type Configuration struct {

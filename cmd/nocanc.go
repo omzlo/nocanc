@@ -39,6 +39,7 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.StringVar(&config.Settings.Blynk.BlynkServer, "blynk-server", config.Settings.Blynk.BlynkServer, "Address of blynk server")
 	fs.StringVar(&config.Settings.Blynk.BlynkToken, "blynk-token", config.Settings.Blynk.BlynkToken, "Blynk authentication token value")
+	fs.Var(&config.Settings.Blynk.Notifiers, "notifiers", "List of channels to use for blynk notifications (experimental)")
 	fs.Var(&config.Settings.Blynk.Readers, "readers", "list of reader mappings")
 	fs.Var(&config.Settings.Blynk.Writers, "writers", "list of writer mappings")
 	return fs
@@ -118,6 +119,7 @@ func publish_cmd(fs *flag.FlagSet) error {
 
 func blynk_cmd(fs *flag.FlagSet) error {
 	var channel_to_pin map[string]uint
+	var channel_notify map[string]bool
 
 	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
@@ -139,12 +141,17 @@ func blynk_cmd(fs *flag.FlagSet) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "There are %d blynk readers.\r\n", len(config.Settings.Blynk.Readers))
-	if len(config.Settings.Blynk.Readers) > 0 {
+	if len(config.Settings.Blynk.Readers) > 0 || len(config.Settings.Blynk.Notifiers) > 0 {
 		channel_to_pin = make(map[string]uint)
+		channel_notify = make(map[string]bool)
 
 		sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
 		if err = conn.Subscribe(sl); err != nil {
 			return err
+		}
+
+		for _, channel := range config.Settings.Blynk.Notifiers {
+			channel_notify[channel] = true
 		}
 
 		client.OnConnect(func(c uint) error {
@@ -157,29 +164,34 @@ func blynk_cmd(fs *flag.FlagSet) error {
 					}
 				}
 
-				go func() {
-					for {
-						value, err := conn.WaitFor(socket.ChannelUpdateEvent)
-
-						if err != nil {
-							return
-						}
-
-						cu := new(socket.ChannelUpdate)
-
-						if err = cu.UnpackValue(value); err != nil {
-							return
-						}
-
-						vpin, ok := channel_to_pin[cu.Name]
-						if ok {
-							client.VirtualWrite(vpin, string(cu.Value))
-						}
-					}
-				}()
 			}
 			return nil
 		})
+
+		go func() {
+			for {
+				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+
+				if err != nil {
+					return
+				}
+
+				cu := new(socket.ChannelUpdate)
+
+				if err = cu.UnpackValue(value); err != nil {
+					return
+				}
+
+				if ok := channel_notify[cu.Name]; ok {
+					client.Notify(fmt.Sprintf("%s: %s", cu.Name, cu.Value))
+				}
+
+				vpin, ok := channel_to_pin[cu.Name]
+				if ok {
+					client.VirtualWrite(vpin, string(cu.Value))
+				}
+			}
+		}()
 
 	}
 	client.Run()
