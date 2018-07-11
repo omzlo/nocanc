@@ -9,6 +9,8 @@ import (
 	"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"runtime"
@@ -47,6 +49,12 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 func DownloadFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.UintVar(&config.Settings.DownloadSizeLimit, "download-size-limit", config.Settings.DownloadSizeLimit, "Download size limit")
+	return fs
+}
+
+func VersionFlagSet(cmd string) *flag.FlagSet {
+	fs := EmptyFlagSet(cmd)
+	fs.BoolVar(&config.Settings.CheckForUpdates, "check-for-updates", config.Settings.CheckForUpdates, "Check if a new version of nocanc is available")
 	return fs
 }
 
@@ -498,6 +506,34 @@ func reboot_cmd(fs *flag.FlagSet) error {
 
 func version_cmd(fs *flag.FlagSet) error {
 	fmt.Printf("nocanc version %s-%s-%s\r\n", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
+	if config.Settings.CheckForUpdates {
+		fmt.Printf("\r\nChecking if a new version is available for download:\r\n")
+		resp, err := http.Get("http://omzlo.com/downloads/nocanc.version")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("Download request returned http status code '%s'", resp.Status)
+		}
+		bcontent, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if len(bcontent) == 0 {
+			return fmt.Errorf("Downloaded version file is empty")
+		}
+		content := strings.TrimSpace(string(bcontent))
+		if content[0] < '0' || content[0] > '9' {
+			return fmt.Errorf("Downloaded version file does not appear to contain a valid version number")
+		}
+		if content != NOCANC_VERSION {
+			fmt.Printf(" - Version %s of nocanc is available for download.\r\n", content)
+		} else {
+			fmt.Printf(" - This version of nocanc is up-to-date\r\n")
+		}
+	}
+	fmt.Printf("\r\n")
 	return nil
 }
 
@@ -551,7 +587,7 @@ var Commands = []*CommandDescriptor{
 	{"read-channel", read_channel_cmd, BaseFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
 	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
-	{"version", version_cmd, EmptyFlagSet, "version", "display the version"},
+	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
 }
 
 func FindCommandMatches(cmd string) []*CommandDescriptor {

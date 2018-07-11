@@ -87,6 +87,7 @@ type Configuration struct {
 	AuthToken         string `toml:"auth-token"`
 	DownloadSizeLimit uint   `toml:"download-size-limit"`
 	Blynk             BlynkConfiguration
+	CheckForUpdates   bool `toml:"check-for-updates"`
 }
 
 var Settings = Configuration{
@@ -97,6 +98,7 @@ var Settings = Configuration{
 		BlynkServer: blynk.BLYNK_ADDRESS,
 		BlynkToken:  "missing-token",
 	},
+	CheckForUpdates: true,
 }
 
 func Load() error {
