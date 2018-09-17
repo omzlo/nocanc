@@ -103,7 +103,7 @@ var Settings = Configuration{
 
 func Load() error {
 
-	fn, err := helpers.LocateDotFile("nocanc.conf")
+	fn, err := helpers.LocateFile(helpers.HomeDir(), ".nocanc.conf")
 
 	if err != nil {
 		// no config file found, continue normally.

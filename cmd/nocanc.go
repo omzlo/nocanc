@@ -7,15 +7,13 @@ import (
 	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocand/models/device"
+	"github.com/omzlo/nocand/models/helpers"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
-	"io/ioutil"
-	"net/http"
 	"os"
 	"path"
 	"runtime"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -508,29 +506,17 @@ func version_cmd(fs *flag.FlagSet) error {
 	fmt.Printf("nocanc version %s-%s-%s\r\n", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
 	if config.Settings.CheckForUpdates {
 		fmt.Printf("\r\nChecking if a new version is available for download:\r\n")
-		resp, err := http.Get("http://omzlo.com/downloads/nocanc.version")
+		content, err := helpers.CheckForUpdates("http://omzlo.com/downloads/nocanc.version")
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			return fmt.Errorf("Download request returned http status code '%s'", resp.Status)
-		}
-		bcontent, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			return err
-		}
-		if len(bcontent) == 0 {
-			return fmt.Errorf("Downloaded version file is empty")
-		}
-		content := strings.TrimSpace(string(bcontent))
-		if content[0] < '0' || content[0] > '9' {
-			return fmt.Errorf("Downloaded version file does not appear to contain a valid version number")
-		}
-		if content != NOCANC_VERSION {
-			fmt.Printf(" - Version %s of nocanc is available for download.\r\n", content)
+		if content[0] != NOCANC_VERSION {
+			fmt.Printf(" - Version %s of nocanc is available for download.\r\n", content[0])
+			if len(content) > 1 {
+				fmt.Printf(" - Release notes:\r\n%s\r\n", content[1])
+			}
 		} else {
-			fmt.Printf(" - This version of nocanc is up-to-date\r\n")
+			fmt.Printf(" - This version of nocand is up-to-date\r\n")
 		}
 	}
 	fmt.Printf("\r\n")
@@ -540,43 +526,32 @@ func version_cmd(fs *flag.FlagSet) error {
 func help_cmd(fs *flag.FlagSet) error {
 	xargs := fs.Args()
 
-	progname := path.Base(os.Args[0])
-
 	if len(xargs) == 0 {
+
 		fmt.Printf("Usage:\r\n")
-		for _, c := range Commands {
-			fmt.Printf("%s %s\r\n\t- %s\r\n", progname, c.usage, c.help)
-		}
+		fmt.Println(Commands.Usage())
+
 	} else {
 		if len(xargs) == 1 {
-			c := FindCommandMatches(xargs[0])
-			if len(c) == 1 {
-				fmt.Printf("%s %s\r\n\t- %s\r\n", progname, c[0].usage, c[0].help)
-				fmt.Printf("This command takes the following options:\r\n")
-				fs2 := c[0].flags(xargs[0])
-				fs2.VisitAll(func(f *flag.Flag) {
-					fmt.Printf("\t-%s\t%s (default %s)\r\n", f.Name, f.Usage, f.DefValue)
-				})
+			c := Commands.Find(xargs[0])
+			if c != nil {
+				fmt.Printf("Usage:\r\n")
+				fmt.Println(c.Usage())
 			} else {
-				fmt.Printf("Ambiguous command. Did you mean:\r\n")
-				for _, v := range c {
-					fmt.Printf("%s help %s\r\n", progname, v.command)
+				fmt.Printf("Unknonwn command '%s'.\r\n", xargs[0])
+				c := Commands.FuzzyMatch(xargs[0])
+				if c != nil {
+					fmt.Printf("Did you mean '%s'?\r\n", c.Command)
 				}
 			}
+		} else {
+			fmt.Printf("help does not accept more than one parameter.\r\n")
 		}
 	}
 	return nil
 }
 
-type CommandDescriptor struct {
-	command   string
-	processor func(*flag.FlagSet) error
-	flags     func(string) *flag.FlagSet
-	usage     string
-	help      string
-}
-
-var Commands = []*CommandDescriptor{
+var Commands = helpers.CommandFlagSetList{
 	{"blynk", blynk_cmd, BlynkFlagSet, "blynk [options]", "Connect to a blynk server (see https://www.blynk.cc/)"},
 	{"download", download_cmd, DownloadFlagSet, "download [options] <filename> <node_id>", "Download firmware from node"},
 	{"help", nil, EmptyFlagSet, "help <command>", "Provide help about a command, or general help if no command is specified"},
@@ -590,60 +565,31 @@ var Commands = []*CommandDescriptor{
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
 }
 
-func FindCommandMatches(cmd string) []*CommandDescriptor {
-	var matches []*CommandDescriptor
-
-	for _, c := range Commands {
-		if strings.HasPrefix(c.command, cmd) {
-			matches = append(matches, c)
-		} else {
-		}
-	}
-	return matches
-}
-
 func main() {
 
-	progname := path.Base(os.Args[0])
+	command, fs, err := Commands.Parse()
 
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "# %s: Missing command\r\n", progname)
-		fmt.Fprintf(os.Stderr, "# type `%s help` for usage\r\n", progname)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "# %s\r\n", err)
+		fmt.Fprintf(os.Stderr, "# type `%s help` for usage\r\n", path.Base(os.Args[0]))
 		os.Exit(-2)
 	}
 
-	err := config.Load()
+	err = config.Load()
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\r\n", err)
 		os.Exit(-2)
 	}
 
-	command := FindCommandMatches(os.Args[1])
-	if len(command) == 0 {
-		fmt.Fprintf(os.Stderr, "# Unknown command '%s', type '%s help' for a list of valid commands\r\n", os.Args[1], progname)
-		os.Exit(-2)
-	}
-	if len(command) > 1 {
-		fmt.Fprintf(os.Stderr, "# Ambiguous command '%s', type '%s help' for a list of valid commands\r\n", os.Args[1], progname)
-		os.Exit(-2)
-	}
+	if command.Processor == nil {
+		help_cmd(fs)
+	} else {
+		err = command.Processor(fs)
 
-	var fs *flag.FlagSet
-
-	fs = command[0].flags(command[0].command)
-	if err = fs.Parse(os.Args[2:]); err != nil {
-		fmt.Fprintf(os.Stderr, "# %s\r\n", err)
-		fmt.Fprintf(os.Stderr, "# type '%s help %s' for a list of valid options\r\n", progname, os.Args[1])
-		os.Exit(-2)
-	}
-
-	if command[0].processor != nil {
-		if err = command[0].processor(fs); err != nil {
-			fmt.Fprintf(os.Stderr, "# %s failed: %s\r\n", command[0].command, err)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "# %s failed: %s\r\n", command.Command, err)
 			os.Exit(-1)
 		}
-	} else {
-		help_cmd(fs)
 	}
 }
