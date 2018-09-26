@@ -502,6 +502,56 @@ func reboot_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+func power_cmd(fs *flag.FlagSet) error {
+	var expect bool
+
+	xargs := fs.Args()
+
+	if len(xargs) != 1 {
+		return fmt.Errorf("Expected one parameter: 'on' or 'off'")
+	}
+
+	switch xargs[0] {
+	case "on", "1":
+		expect = true
+	case "off", "0":
+		expect = false
+	default:
+		return fmt.Errorf("Parameter can only have one of the following values: 'on', 'off', '1' or '0'.")
+	}
+
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	sl := socket.NewSubscriptionList(socket.BusPowerEvent)
+	if err = conn.Subscribe(sl); err != nil {
+		return err
+	}
+	if err = conn.Put(socket.BusPowerEvent, socket.BusPower(expect)); err != nil {
+		return err
+	}
+
+	value, err := conn.WaitFor(socket.BusPowerEvent)
+
+	if err != nil {
+		return err
+	}
+
+	var power socket.BusPower
+	if err = power.UnpackValue(value); err != nil {
+		return err
+	}
+
+	if bool(power) == expect {
+		fmt.Printf("# Bus power set to: %s\r\n", xargs[0])
+		return nil
+	}
+	return fmt.Errorf("Failed to set bus power to %s", xargs[0])
+}
+
 func version_cmd(fs *flag.FlagSet) error {
 	fmt.Printf("nocanc version %s-%s-%s\r\n", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
 	if config.Settings.CheckForUpdates {
@@ -558,6 +608,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"list-channels", list_channels_cmd, BaseFlagSet, "list-channels [options]", "List all channels"},
 	{"list-nodes", list_nodes_cmd, BaseFlagSet, "list-nodes [options]", "List all nodes"},
 	{"monitor", monitor_cmd, BaseFlagSet, "monitor [options] <eid1> <eid2> ...", "Monitor selected by eid, or all events if no eid specified"},
+	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
 	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
 	{"read-channel", read_channel_cmd, BaseFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
 	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
