@@ -56,7 +56,7 @@ func (bl BlynkMap) String() string {
 	var s []string
 
 	for _, item := range bl {
-		s = append(s, fmt.Sprintf("%i:%s", item.Pin, item.Channel))
+		s = append(s, fmt.Sprintf("%i::%s", item.Pin, item.Channel))
 	}
 	return strings.Join(s, ",")
 }
@@ -74,6 +74,53 @@ func (bl BlynkList) String() string {
 
 /***/
 
+type MqttAssoc struct {
+	Channel string
+	Topic   string
+}
+
+func (ma *MqttAssoc) Set(s string) error {
+	parts := strings.SplitN(s, "::", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("Mqtt associations must contain two strings seperated by '::'")
+	}
+	ma.Channel = parts[0]
+	if len(parts[1]) == 0 {
+		ma.Topic = parts[0]
+	} else {
+		ma.Topic = parts[1]
+	}
+	return nil
+}
+
+type MqttMap []*MqttAssoc
+
+func (mm *MqttMap) Set(s string) error {
+	*mm = nil
+
+	v := strings.Split(s, ",")
+	for _, item := range v {
+		ma := new(MqttAssoc)
+
+		if err := ma.Set(item); err != nil {
+			return err
+		}
+		*mm = append(*mm, ma)
+	}
+	return nil
+}
+
+func (mm MqttMap) String() string {
+	var s []string
+
+	for _, item := range mm {
+		s = append(s, fmt.Sprintf("%s::%s", item.Channel, item.Topic))
+	}
+	return strings.Join(s, ",")
+}
+
+/***/
+
 type BlynkConfiguration struct {
 	BlynkServer string    `toml:"blynk-server"`
 	BlynkToken  string    `toml:"blynk-token"`
@@ -82,12 +129,20 @@ type BlynkConfiguration struct {
 	Notifiers   BlynkList `toml:"notifiers"`
 }
 
+type MqttConfiguration struct {
+	ClientId   string  `toml:"client-id"`
+	MqttServer string  `toml:"mqtt-server"`
+	Publishers MqttMap `toml:"publishers"`
+}
+
 type Configuration struct {
 	EventServer       string `toml:"event-server"`
 	AuthToken         string `toml:"auth-token"`
 	DownloadSizeLimit uint   `toml:"download-size-limit"`
 	Blynk             BlynkConfiguration
-	CheckForUpdates   bool `toml:"check-for-updates"`
+	Mqtt              MqttConfiguration
+	CheckForUpdates   bool   `toml:"check-for-updates"`
+	LogTerminal       string `toml:"log-terminal"`
 }
 
 var Settings = Configuration{
@@ -98,7 +153,12 @@ var Settings = Configuration{
 		BlynkServer: blynk.BLYNK_ADDRESS,
 		BlynkToken:  "missing-token",
 	},
+	Mqtt: MqttConfiguration{
+		ClientId:   "nocanc",
+		MqttServer: "mqtt://localhost",
+	},
 	CheckForUpdates: true,
+	LogTerminal:     "plain",
 }
 
 func Load() error {

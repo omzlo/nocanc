@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
+	"github.com/omzlo/gomqtt_mini_client"
 	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocand/models/device"
@@ -31,6 +33,7 @@ func BaseFlagSet(cmd string) *flag.FlagSet {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	fs.StringVar(&config.Settings.EventServer, "event-server", config.Settings.EventServer, "Address of event server")
 	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.Settings.AuthToken, "Authentication key")
+	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.Settings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
 	return fs
 }
 
@@ -41,6 +44,13 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 	fs.Var(&config.Settings.Blynk.Notifiers, "notifiers", "List of channels to use for blynk notifications (experimental)")
 	fs.Var(&config.Settings.Blynk.Readers, "readers", "list of reader mappings")
 	fs.Var(&config.Settings.Blynk.Writers, "writers", "list of writer mappings")
+	return fs
+}
+
+func MqttFlagSet(cmd string) *flag.FlagSet {
+	fs := BaseFlagSet(cmd)
+	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.Settings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
+	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
 	return fs
 }
 
@@ -92,7 +102,7 @@ func monitor_cmd(fs *flag.FlagSet) error {
 		case socket.BusPowerStatusUpdateEvent:
 			var ps device.PowerStatus
 			if err := ps.UnpackValue(value); err != nil {
-				fmt.Printf("# Error: %s", err)
+				clog.Warning("Could not unpack event: %s", err)
 			} else {
 				fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, ps)
 			}
@@ -134,7 +144,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 
 	client := blynk.NewClient(config.Settings.Blynk.BlynkServer, config.Settings.Blynk.BlynkToken)
 
-	fmt.Fprintf(os.Stderr, "There are %d blynk writers.\r\n", len(config.Settings.Blynk.Writers))
+	clog.Info("There are %d blynk writers.", len(config.Settings.Blynk.Writers))
 	for _, it_writer := range config.Settings.Blynk.Writers {
 		writer := it_writer
 		client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
@@ -145,7 +155,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		})
 	}
 
-	fmt.Fprintf(os.Stderr, "There are %d blynk readers.\r\n", len(config.Settings.Blynk.Readers))
+	clog.Info("There are %d blynk readers.", len(config.Settings.Blynk.Readers))
 	if len(config.Settings.Blynk.Readers) > 0 || len(config.Settings.Blynk.Notifiers) > 0 {
 		channel_to_pin = make(map[string]uint)
 		channel_notify = make(map[string]bool)
@@ -203,6 +213,58 @@ func blynk_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+func mqtt_cmd(fs *flag.FlagSet) error {
+
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	mqtt, err := gomqtt_mini_client.NewMqttClient(config.Settings.Mqtt.ClientId, config.Settings.Mqtt.MqttServer)
+	if err != nil {
+		return err
+	}
+	err = mqtt.Connect()
+	if err != nil {
+		return err
+	}
+
+	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
+	if err = conn.Subscribe(sl); err != nil {
+		return err
+	}
+
+	if len(config.Settings.Mqtt.Publishers) > 0 {
+		channel_pub := make(map[string]string)
+
+		for _, pubs := range config.Settings.Mqtt.Publishers {
+			channel_pub[pubs.Channel] = pubs.Topic
+			clog.DebugXX("Mapping channel '%s' to topic '%s'", pubs.Channel, pubs.Topic)
+		}
+
+		for {
+			value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+
+			if err != nil {
+				return err
+			}
+
+			cu := new(socket.ChannelUpdate)
+
+			if err = cu.UnpackValue(value); err != nil {
+				return err
+			}
+
+			if topic, ok := channel_pub[cu.Name]; ok {
+				clog.Info("Publishing %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, topic)
+				mqtt.Publish(topic, cu.Value)
+			}
+		}
+	}
+	return nil
+}
+
 func list_channels_cmd(fs *flag.FlagSet) error {
 
 	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
@@ -230,7 +292,7 @@ func list_channels_cmd(fs *flag.FlagSet) error {
 	if err = cl.UnpackValue(value); err != nil {
 		return err
 	}
-	fmt.Println("# Channels:")
+	clog.Info("Listing %d channels.", len(cl.Channels))
 	fmt.Println(cl)
 	return nil
 }
@@ -261,7 +323,7 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 	if err = nl.UnpackValue(value); err != nil {
 		return err
 	}
-	fmt.Println("# Nodes:")
+	clog.Info("Listing %d nodes.", len(nl.Nodes))
 	fmt.Println(nl)
 	return nil
 }
@@ -311,7 +373,7 @@ func read_channel_cmd(fs *flag.FlagSet) error {
 			fmt.Println(cu)
 			break
 		}
-		fmt.Println("# Channel update ignored: <%s>", cu)
+		clog.Debug("Channel update ignored: <%s>", cu)
 	}
 	return nil
 }
@@ -347,7 +409,7 @@ func upload_cmd(fs *flag.FlagSet) error {
 		if block.Type == intelhex.DataRecord {
 			upload_request.AppendBlock(block.Address, block.Data)
 		} else {
-			fmt.Printf("Ignoring record of type %d in hex file %s", block.Type, filename)
+			clog.Debug("Ignoring record of type %d in hex file %s", block.Type, filename)
 		}
 	}
 
@@ -608,6 +670,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"list-channels", list_channels_cmd, BaseFlagSet, "list-channels [options]", "List all channels"},
 	{"list-nodes", list_nodes_cmd, BaseFlagSet, "list-nodes [options]", "List all nodes"},
 	{"monitor", monitor_cmd, BaseFlagSet, "monitor [options] <eid1> <eid2> ...", "Monitor selected by eid, or all events if no eid specified"},
+	{"mqtt", mqtt_cmd, MqttFlagSet, "mqtt [options]", "Connect to a mqtt server, translating NoCAN channels to MQTT topics."},
 	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
 	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
 	{"read-channel", read_channel_cmd, BaseFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
@@ -632,6 +695,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\r\n", err)
 		os.Exit(-2)
 	}
+
+	switch config.Settings.LogTerminal {
+	case "plain":
+		clog.AddWriter(clog.PlainTerminal)
+	case "color":
+		clog.AddWriter(clog.ColorTerminal)
+	case "none":
+		// skip
+	default:
+		fmt.Fprintf(os.Stderr, "# log-terminal setting must be either 'plain', 'color' or 'none'.\r\n")
+		os.Exit(-1)
+	}
+	clog.SetLogLevel(clog.DEBUGXX)
 
 	if command.Processor == nil {
 		help_cmd(fs)
