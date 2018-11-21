@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"github.com/BurntSushi/toml"
+	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
 	"github.com/omzlo/nocand/models/helpers"
 	"strconv"
@@ -130,9 +131,10 @@ type BlynkConfiguration struct {
 }
 
 type MqttConfiguration struct {
-	ClientId   string  `toml:"client-id"`
-	MqttServer string  `toml:"mqtt-server"`
-	Publishers MqttMap `toml:"publishers"`
+	ClientId    string  `toml:"client-id"`
+	MqttServer  string  `toml:"mqtt-server"`
+	Publishers  MqttMap `toml:"publishers"`
+	Subscribers MqttMap `toml:"subscribers"`
 }
 
 type Configuration struct {
@@ -141,11 +143,14 @@ type Configuration struct {
 	DownloadSizeLimit uint   `toml:"download-size-limit"`
 	Blynk             BlynkConfiguration
 	Mqtt              MqttConfiguration
-	CheckForUpdates   bool   `toml:"check-for-updates"`
-	LogTerminal       string `toml:"log-terminal"`
+	CheckForUpdates   bool              `toml:"check-for-updates"`
+	LogTerminal       string            `toml:"log-terminal"`
+	LogLevel          clog.LogLevel     `toml:"log-verbosity"`
+	LogFile           *helpers.FilePath `toml:"log-file"`
+	OnUpdate          bool              `toml:"on-update"`
 }
 
-var Settings = Configuration{
+var DefaultSettings = Configuration{
 	EventServer:       ":4242",
 	AuthToken:         "missing-password",
 	DownloadSizeLimit: (1 << 32) - 1,
@@ -158,19 +163,24 @@ var Settings = Configuration{
 		MqttServer: "mqtt://localhost",
 	},
 	CheckForUpdates: true,
+	LogLevel:        clog.INFO,
 	LogTerminal:     "plain",
+	LogFile:         helpers.NewFilePath(),
+	OnUpdate:        false,
 }
+
+var Settings = DefaultSettings
+
+var DefaultConfigFile *helpers.FilePath = helpers.HomeDir().Append(".nocanc.conf")
 
 func Load() error {
 
-	fn, err := helpers.LocateFile(helpers.HomeDir(), ".nocanc.conf")
-
-	if err != nil {
+	if !DefaultConfigFile.Exists() {
 		// no config file found, continue normally.
 		return nil
 	}
 
-	if _, err := toml.DecodeFile(fn, &Settings); err != nil {
+	if _, err := toml.DecodeFile(DefaultConfigFile.String(), &Settings); err != nil {
 		return err
 	}
 

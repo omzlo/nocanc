@@ -31,16 +31,18 @@ func EmptyFlagSet(cmd string) *flag.FlagSet {
 
 func BaseFlagSet(cmd string) *flag.FlagSet {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	fs.StringVar(&config.Settings.EventServer, "event-server", config.Settings.EventServer, "Address of event server")
-	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.Settings.AuthToken, "Authentication key")
-	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.Settings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
+	fs.StringVar(&config.Settings.EventServer, "event-server", config.DefaultSettings.EventServer, "Address of event server")
+	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.DefaultSettings.AuthToken, "Authentication key")
+	fs.Var(&config.Settings.LogLevel, "log-level", "Log verbosity level (DEBUGXX, DEBUGX, DEBUG, INFO, WARNING, ERROR or NONE)")
+	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.DefaultSettings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
+	fs.Var(config.Settings.LogFile, "log-file", "Name of file where logs are stored. Empty value dissables the log file (default is '').")
 	return fs
 }
 
 func BlynkFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Blynk.BlynkServer, "blynk-server", config.Settings.Blynk.BlynkServer, "Address of blynk server")
-	fs.StringVar(&config.Settings.Blynk.BlynkToken, "blynk-token", config.Settings.Blynk.BlynkToken, "Blynk authentication token value")
+	fs.StringVar(&config.Settings.Blynk.BlynkServer, "blynk-server", config.DefaultSettings.Blynk.BlynkServer, "Address of blynk server")
+	fs.StringVar(&config.Settings.Blynk.BlynkToken, "blynk-token", config.DefaultSettings.Blynk.BlynkToken, "Blynk authentication token value")
 	fs.Var(&config.Settings.Blynk.Notifiers, "notifiers", "List of channels to use for blynk notifications (experimental)")
 	fs.Var(&config.Settings.Blynk.Readers, "readers", "list of reader mappings")
 	fs.Var(&config.Settings.Blynk.Writers, "writers", "list of writer mappings")
@@ -49,24 +51,40 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 
 func MqttFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.Settings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
+	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.DefaultSettings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
 	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
 	return fs
 }
 
 func DownloadFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.UintVar(&config.Settings.DownloadSizeLimit, "download-size-limit", config.Settings.DownloadSizeLimit, "Download size limit")
+	fs.UintVar(&config.Settings.DownloadSizeLimit, "download-size-limit", config.DefaultSettings.DownloadSizeLimit, "Download size limit")
 	return fs
 }
 
 func VersionFlagSet(cmd string) *flag.FlagSet {
 	fs := EmptyFlagSet(cmd)
-	fs.BoolVar(&config.Settings.CheckForUpdates, "check-for-updates", config.Settings.CheckForUpdates, "Check if a new version of nocanc is available")
+	fs.BoolVar(&config.Settings.CheckForUpdates, "check-for-updates", config.DefaultSettings.CheckForUpdates, "Check if a new version of nocanc is available")
+	return fs
+}
+
+func ReadChannelFlagSet(cmd string) *flag.FlagSet {
+	fs := BaseFlagSet(cmd)
+	fs.BoolVar(&config.Settings.OnUpdate, "on-update", false, "Wait until channel is updated instead of returning last value immediately")
 	return fs
 }
 
 /***/
+
+func DialNocanServer() (*socket.EventConn, error) {
+	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	if err != nil {
+		clog.Warning("Failed to connect to '%s', %s", config.Settings.EventServer, err)
+		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
+	}
+	clog.Debug("Connected to NoCAN event server '%s'", config.Settings.EventServer)
+	return conn, nil
+}
 
 func monitor_cmd(fs *flag.FlagSet) error {
 
@@ -85,7 +103,7 @@ func monitor_cmd(fs *flag.FlagSet) error {
 			sl.Add(socket.EventId(i))
 		}
 	}
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -123,7 +141,7 @@ func publish_cmd(fs *flag.FlagSet) error {
 	channelName := args[0]
 	channelValue := args[1]
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -136,7 +154,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 	var channel_to_pin map[string]uint
 	var channel_notify map[string]bool
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -215,7 +233,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 
 func mqtt_cmd(fs *flag.FlagSet) error {
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -225,6 +243,33 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	if err != nil {
 		return err
 	}
+
+	if len(config.Settings.Mqtt.Subscribers) > 0 {
+		channel_sub := make(map[string]string)
+
+		for _, subs := range config.Settings.Mqtt.Subscribers {
+			channel_sub[subs.Topic] = subs.Channel
+			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
+		}
+
+		mqtt.SubscribeCallback = func(topic string, value []byte) {
+			channel, ok := channel_sub[topic]
+			if ok {
+				conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(channel, 0xFFFF, socket.CHANNEL_UPDATED, value))
+				clog.Debug("Dispatched %d byte message for NoCAN channel '%s'", channel)
+			} else {
+				clog.Warning("Received message for MQTT topic '%s', but this topic is not mapped to any NoCAN channel", topic)
+			}
+		}
+
+		mqtt.OnConnect = func(client *gomqtt_mini_client.MqttClient) {
+			for _, subs := range config.Settings.Mqtt.Subscribers {
+				client.Subscribe(subs.Topic)
+				clog.Debug("Subscribed to MQTT topic %s", subs.Topic)
+			}
+		}
+	}
+
 	err = mqtt.Connect()
 	if err != nil {
 		return err
@@ -240,7 +285,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 
 		for _, pubs := range config.Settings.Mqtt.Publishers {
 			channel_pub[pubs.Channel] = pubs.Topic
-			clog.DebugXX("Mapping channel '%s' to topic '%s'", pubs.Channel, pubs.Topic)
+			clog.Debug("Mapping NoCAN channel '%s' to MQTT topic '%s' for publication", pubs.Channel, pubs.Topic)
 		}
 
 		for {
@@ -250,15 +295,20 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 				return err
 			}
 
-			cu := new(socket.ChannelUpdate)
+			if mqtt.Connected {
+				cu := new(socket.ChannelUpdate)
 
-			if err = cu.UnpackValue(value); err != nil {
-				return err
-			}
+				if err = cu.UnpackValue(value); err != nil {
+					return err
+				}
 
-			if topic, ok := channel_pub[cu.Name]; ok {
-				clog.Info("Publishing %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, topic)
-				mqtt.Publish(topic, cu.Value)
+				if topic, ok := channel_pub[cu.Name]; ok {
+					if err = mqtt.Publish(topic, cu.Value); err != nil {
+						clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, topic, err)
+					} else {
+						clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, topic)
+					}
+				}
 			}
 		}
 	}
@@ -267,7 +317,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 
 func list_channels_cmd(fs *flag.FlagSet) error {
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -299,7 +349,7 @@ func list_channels_cmd(fs *flag.FlagSet) error {
 
 func list_nodes_cmd(fs *flag.FlagSet) error {
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -329,8 +379,6 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 }
 
 func read_channel_cmd(fs *flag.FlagSet) error {
-	//fs.BoolVar(&OptOnUpdate, "on-update", false, "wait until channel is updated instead of returning last value immediately")
-
 	args := fs.Args()
 
 	if len(args) != 1 {
@@ -338,7 +386,7 @@ func read_channel_cmd(fs *flag.FlagSet) error {
 	}
 	channelName := args[0]
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -348,15 +396,12 @@ func read_channel_cmd(fs *flag.FlagSet) error {
 	if err = conn.Subscribe(sl); err != nil {
 		return err
 	}
-	/*
-	   if !OptOnUpdate {
-	*/
-	if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(channelName, 0xFFFF)); err != nil {
-		return err
+
+	if !config.Settings.OnUpdate {
+		if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(channelName, 0xFFFF)); err != nil {
+			return err
+		}
 	}
-	/*
-	   }
-	*/
 
 	for {
 		value, err := conn.WaitFor(socket.ChannelUpdateEvent)
@@ -413,7 +458,7 @@ func upload_cmd(fs *flag.FlagSet) error {
 		}
 	}
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -487,7 +532,7 @@ func download_cmd(fs *flag.FlagSet) error {
 	}
 	defer file.Close()
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -582,7 +627,7 @@ func power_cmd(fs *flag.FlagSet) error {
 		return fmt.Errorf("Parameter can only have one of the following values: 'on', 'off', '1' or '0'.")
 	}
 
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
+	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
@@ -673,7 +718,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"mqtt", mqtt_cmd, MqttFlagSet, "mqtt [options]", "Connect to a mqtt server, translating NoCAN channels to MQTT topics."},
 	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
 	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
-	{"read-channel", read_channel_cmd, BaseFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
+	{"read-channel", read_channel_cmd, ReadChannelFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
 	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
@@ -690,9 +735,8 @@ func main() {
 	}
 
 	err = config.Load()
-
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error in configuration file: %s\r\n", err)
+		fmt.Fprintf(os.Stderr, "Error in configuration file %s: %s\r\n", config.DefaultConfigFile, err)
 		os.Exit(-2)
 	}
 
@@ -707,7 +751,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "# log-terminal setting must be either 'plain', 'color' or 'none'.\r\n")
 		os.Exit(-1)
 	}
-	clog.SetLogLevel(clog.DEBUGXX)
+	clog.SetLogLevel(config.Settings.LogLevel)
+	if !config.Settings.LogFile.IsNull() {
+		clog.AddWriter(clog.NewFileLogWriter(config.Settings.LogFile.String()))
+	}
 
 	if command.Processor == nil {
 		help_cmd(fs)
@@ -715,7 +762,7 @@ func main() {
 		err = command.Processor(fs)
 
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "# %s failed: %s\r\n", command.Command, err)
+			fmt.Fprintf(os.Stderr, "# 'nocanc %s' failed, %s\r\n", command.Command, err)
 			os.Exit(-1)
 		}
 	}
