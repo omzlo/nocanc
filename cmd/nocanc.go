@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"github.com/omzlo/clog"
@@ -16,6 +17,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"text/template"
 	"time"
 )
 
@@ -52,7 +54,9 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 func MqttFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.DefaultSettings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
+	fs.StringVar(&config.Settings.Mqtt.ClientId, "client-id", config.DefaultSettings.Mqtt.ClientId, "MQTT client identifier")
 	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
+	fs.Var(&config.Settings.Mqtt.Subscribers, "subscribers", "List of topics to subscribe from the mqtt server")
 	return fs
 }
 
@@ -231,6 +235,11 @@ func blynk_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+type mqtt_mapping struct {
+	Target    string
+	Transform *template.Template
+}
+
 func mqtt_cmd(fs *flag.FlagSet) error {
 
 	conn, err := DialNocanServer()
@@ -245,18 +254,37 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	}
 
 	if len(config.Settings.Mqtt.Subscribers) > 0 {
-		channel_sub := make(map[string]string)
+		channel_sub := make(map[string]mqtt_mapping)
 
 		for _, subs := range config.Settings.Mqtt.Subscribers {
-			channel_sub[subs.Topic] = subs.Channel
+
+			if len(subs.Transform) == 0 {
+				subs.Transform = `{{ printf "%s" .Value }}`
+			}
+			template, err := template.New(subs.Topic).Parse(subs.Transform)
+			if err != nil {
+				clog.Fatal("Invalid MQTT transformation for topic '%s' subscription, %s", subs.Topic, err)
+			}
+			channel_sub[subs.Topic] = mqtt_mapping{subs.Channel, template}
 			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
 		}
 
 		mqtt.SubscribeCallback = func(topic string, value []byte) {
-			channel, ok := channel_sub[topic]
-			if ok {
-				conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(channel, 0xFFFF, socket.CHANNEL_UPDATED, value))
-				clog.Debug("Dispatched %d byte message for NoCAN channel '%s'", channel)
+			tv := struct {
+				Topic string
+				Value []byte
+			}{
+				topic,
+				value,
+			}
+			if mapping, ok := channel_sub[topic]; ok {
+				svalue := new(bytes.Buffer)
+				if err = mapping.Transform.Execute(svalue, tv); err != nil {
+					clog.Warning("Failed to transform value of topic '%s' for MQTT subscription, %s", tv.Topic)
+				} else {
+					conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes()))
+					clog.Debug("Dispatched %d byte message for NoCAN channel '%s': %q", svalue.Len(), mapping.Target, svalue.Bytes())
+				}
 			} else {
 				clog.Warning("Received message for MQTT topic '%s', but this topic is not mapped to any NoCAN channel", topic)
 			}
@@ -281,10 +309,18 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	}
 
 	if len(config.Settings.Mqtt.Publishers) > 0 {
-		channel_pub := make(map[string]string)
+		channel_pub := make(map[string]mqtt_mapping)
 
 		for _, pubs := range config.Settings.Mqtt.Publishers {
-			channel_pub[pubs.Channel] = pubs.Topic
+
+			if len(pubs.Transform) == 0 {
+				pubs.Transform = `{{ printf "%s" .Value }}`
+			}
+			template, err := template.New(pubs.Channel).Parse(pubs.Transform)
+			if err != nil {
+				clog.Fatal("Invalide MQTT transformation for channel '%s' publications, %s", pubs.Channel, err)
+			}
+			channel_pub[pubs.Channel] = mqtt_mapping{pubs.Topic, template}
 			clog.Debug("Mapping NoCAN channel '%s' to MQTT topic '%s' for publication", pubs.Channel, pubs.Topic)
 		}
 
@@ -302,11 +338,17 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 					return err
 				}
 
-				if topic, ok := channel_pub[cu.Name]; ok {
-					if err = mqtt.Publish(topic, cu.Value); err != nil {
-						clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, topic, err)
+				if mapping, ok := channel_pub[cu.Name]; ok {
+					value := new(bytes.Buffer)
+					if err = mapping.Transform.Execute(value, cu); err != nil {
+						clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.Name)
 					} else {
-						clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, topic)
+						if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
+							clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, mapping.Target, err)
+						} else {
+							clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, mapping.Target)
+							clog.Debug("Published value is %q", value.Bytes())
+						}
 					}
 				}
 			}
@@ -763,7 +805,7 @@ func main() {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "# 'nocanc %s' failed, %s\r\n", command.Command, err)
-			os.Exit(-1)
 		}
 	}
+	clog.Terminate()
 }

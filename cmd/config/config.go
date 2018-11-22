@@ -75,21 +75,48 @@ func (bl BlynkList) String() string {
 
 /***/
 
+func superSplit(s string) []string {
+	var result []string
+	var item string
+
+	escape := false
+	for _, c := range s {
+		if c == '{' {
+			escape = true
+		}
+		if c == '}' {
+			escape = false
+		}
+		if c == ',' && !escape {
+			result = append(result, item)
+			item = ""
+		} else {
+			item += string(c)
+		}
+	}
+	if item != "" {
+		result = append(result, item)
+	}
+	return result
+}
+
 type MqttAssoc struct {
-	Channel string
-	Topic   string
+	Channel   string
+	Transform string
+	Topic     string
 }
 
 func (ma *MqttAssoc) Set(s string) error {
-	parts := strings.SplitN(s, "::", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("Mqtt associations must contain two strings seperated by '::'")
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("Mqtt associations must contain strings seperated by ':'")
 	}
 	ma.Channel = parts[0]
-	if len(parts[1]) == 0 {
+	ma.Transform = parts[1]
+	if len(parts[2]) == 0 {
 		ma.Topic = parts[0]
 	} else {
-		ma.Topic = parts[1]
+		ma.Topic = parts[2]
 	}
 	return nil
 }
@@ -99,7 +126,7 @@ type MqttMap []*MqttAssoc
 func (mm *MqttMap) Set(s string) error {
 	*mm = nil
 
-	v := strings.Split(s, ",")
+	v := superSplit(s)
 	for _, item := range v {
 		ma := new(MqttAssoc)
 
@@ -115,7 +142,7 @@ func (mm MqttMap) String() string {
 	var s []string
 
 	for _, item := range mm {
-		s = append(s, fmt.Sprintf("%s::%s", item.Channel, item.Topic))
+		s = append(s, fmt.Sprintf("%s:%s:%s", item.Channel, item.Transform, item.Topic))
 	}
 	return strings.Join(s, ",")
 }
@@ -159,7 +186,7 @@ var DefaultSettings = Configuration{
 		BlynkToken:  "missing-token",
 	},
 	Mqtt: MqttConfiguration{
-		ClientId:   "nocanc",
+		ClientId:   "com.omzlo.mqtt.nocanc",
 		MqttServer: "mqtt://localhost",
 	},
 	CheckForUpdates: true,
