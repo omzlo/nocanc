@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
-	"github.com/omzlo/gomqtt_mini_client"
+	"github.com/omzlo/gomqtt-mini-client"
 	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocand/models/device"
@@ -354,6 +354,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			}
 		}
 	}
+	clog.DebugXX("Reached end of cmd_mqtt()")
 	return nil
 }
 
@@ -807,5 +808,5 @@ func main() {
 			fmt.Fprintf(os.Stderr, "# 'nocanc %s' failed, %s\r\n", command.Command, err)
 		}
 	}
-	clog.Terminate()
+	clog.Terminate(0)
 }
