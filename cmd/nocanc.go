@@ -706,7 +706,7 @@ func version_cmd(fs *flag.FlagSet) error {
 	fmt.Printf("nocanc version %s-%s-%s\r\n", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
 	if config.Settings.CheckForUpdates {
 		fmt.Printf("\r\nChecking if a new version is available for download:\r\n")
-		content, err := helpers.CheckForUpdates("http://omzlo.com/downloads/nocanc.version")
+		content, err := helpers.CheckForUpdates("https://www.omzlo.com/downloads/nocanc.version")
 		if err != nil {
 			return err
 		}
