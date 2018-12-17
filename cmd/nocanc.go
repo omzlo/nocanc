@@ -81,12 +81,14 @@ func ReadChannelFlagSet(cmd string) *flag.FlagSet {
 /***/
 
 func DialNocanServer() (*socket.EventConn, error) {
+	clog.Debug("Trying to connect to NoCAN event server '%s'", config.Settings.EventServer)
+
 	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
 	if err != nil {
 		clog.Warning("Failed to connect to '%s', %s", config.Settings.EventServer, err)
 		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
 	}
-	clog.Debug("Connected to NoCAN event server '%s'", config.Settings.EventServer)
+	clog.Info("Connected to NoCAN event server '%s'", config.Settings.EventServer)
 	return conn, nil
 }
 
@@ -231,8 +233,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		}()
 
 	}
-	client.Run()
-	return nil
+	return client.RunEventLoop()
 }
 
 type mqtt_mapping struct {
@@ -242,16 +243,33 @@ type mqtt_mapping struct {
 
 func mqtt_cmd(fs *flag.FlagSet) error {
 
+	/**************************/
+	/* Setup NoCAN connection */
+	/**************************/
+
 	conn, err := DialNocanServer()
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
+	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
+	if err = conn.Subscribe(sl); err != nil {
+		return err
+	}
+
+	/*************************/
+	/* Setup MQTT connection */
+	/*************************/
+
 	mqtt, err := gomqtt_mini_client.NewMqttClient(config.Settings.Mqtt.ClientId, config.Settings.Mqtt.MqttServer)
 	if err != nil {
 		return err
 	}
+
+	/**************************/
+	/* Setup MQTT subscribers */
+	/**************************/
 
 	if len(config.Settings.Mqtt.Subscribers) > 0 {
 		channel_sub := make(map[string]mqtt_mapping)
@@ -298,15 +316,9 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 		}
 	}
 
-	err = mqtt.Connect()
-	if err != nil {
-		return err
-	}
-
-	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
+	/*************************/
+	/* Setup MQTT publishers */
+	/*************************/
 
 	if len(config.Settings.Mqtt.Publishers) > 0 {
 		channel_pub := make(map[string]mqtt_mapping)
@@ -324,38 +336,42 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			clog.Debug("Mapping NoCAN channel '%s' to MQTT topic '%s' for publication", pubs.Channel, pubs.Topic)
 		}
 
-		for {
-			value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+		go func() {
+			for {
+				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
 
-			if err != nil {
-				return err
-			}
-
-			if mqtt.Connected {
-				cu := new(socket.ChannelUpdate)
-
-				if err = cu.UnpackValue(value); err != nil {
-					return err
+				if err != nil {
+					clog.Error(err.Error())
+					return
 				}
 
-				if mapping, ok := channel_pub[cu.Name]; ok {
-					value := new(bytes.Buffer)
-					if err = mapping.Transform.Execute(value, cu); err != nil {
-						clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.Name)
-					} else {
-						if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
-							clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, mapping.Target, err)
+				if mqtt.Connected() {
+					cu := new(socket.ChannelUpdate)
+
+					if err = cu.UnpackValue(value); err != nil {
+						clog.Error(err.Error())
+						return
+					}
+
+					if mapping, ok := channel_pub[cu.Name]; ok {
+						value := new(bytes.Buffer)
+						if err = mapping.Transform.Execute(value, cu); err != nil {
+							clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.Name)
 						} else {
-							clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, mapping.Target)
-							clog.Debug("Published value is %q", value.Bytes())
+							if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
+								clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, mapping.Target, err)
+							} else {
+								clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, mapping.Target)
+								clog.Debug("Published value is %q", value.Bytes())
+							}
 						}
 					}
 				}
 			}
-		}
+		}()
 	}
-	clog.DebugXX("Reached end of cmd_mqtt()")
-	return nil
+
+	return mqtt.RunEventLoop()
 }
 
 func list_channels_cmd(fs *flag.FlagSet) error {
