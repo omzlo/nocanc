@@ -88,7 +88,7 @@ func DialNocanServer() (*socket.EventConn, error) {
 		clog.Warning("Failed to connect to '%s', %s", config.Settings.EventServer, err)
 		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
 	}
-	clog.Info("Connected to NoCAN event server '%s'", config.Settings.EventServer)
+	clog.Debug("Connected to NoCAN event server '%s'", config.Settings.EventServer)
 	return conn, nil
 }
 
@@ -130,8 +130,16 @@ func monitor_cmd(fs *flag.FlagSet) error {
 			} else {
 				fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, ps)
 			}
+		case socket.ChannelUpdateEvent:
+			var cu socket.ChannelUpdate
+			if err := cu.UnpackValue(value); err != nil {
+				clog.Warning("Could not unpack event: %s", err)
+			} else {
+				fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, cu)
+			}
+
 		default:
-			fmt.Printf("EVENT\t%s\t#%d\t%q\n", eid, eid, value)
+			fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, value)
 		}
 	}
 	return nil
@@ -401,7 +409,7 @@ func list_channels_cmd(fs *flag.FlagSet) error {
 	if err = cl.UnpackValue(value); err != nil {
 		return err
 	}
-	clog.Info("Listing %d channels.", len(cl.Channels))
+	clog.Debug("Listing %d channels.", len(cl.Channels))
 	fmt.Println(cl)
 	return nil
 }
@@ -432,7 +440,7 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 	if err = nl.UnpackValue(value); err != nil {
 		return err
 	}
-	clog.Info("Listing %d nodes.", len(nl.Nodes))
+	clog.Debug("Listing %d nodes.", len(nl.Nodes))
 	fmt.Println(nl)
 	return nil
 }
@@ -494,7 +502,7 @@ func upload_cmd(fs *flag.FlagSet) error {
 	nodeid, err := strconv.Atoi(xargs[1])
 
 	if err != nil {
-		return err
+		return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[1])
 	}
 
 	file, err := os.Open(filename)
@@ -727,12 +735,20 @@ func version_cmd(fs *flag.FlagSet) error {
 			return err
 		}
 		if content[0] != NOCANC_VERSION {
+			var extension string
+
 			fmt.Printf(" - Version %s of nocanc is available for download.\r\n", content[0])
 			if len(content) > 1 {
 				fmt.Printf(" - Release notes:\r\n%s\r\n", content[1])
 			}
+			if runtime.GOOS == "windows" {
+				extension = "zip"
+			} else {
+				extension = "tar.gz"
+			}
+			fmt.Printf(" - Download link: https://www.omzlo.com/downloads/nocanc-%s-%s.%s\r\n", runtime.GOOS, runtime.GOARCH, extension)
 		} else {
-			fmt.Printf(" - This version of nocand is up-to-date\r\n")
+			fmt.Printf(" - This version of nocanc is up-to-date\r\n")
 		}
 	}
 	fmt.Printf("\r\n")
