@@ -809,7 +809,7 @@ func main() {
 		os.Exit(-2)
 	}
 
-	err = config.Load()
+	config_loaded, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error in configuration file %s: %s\r\n", config.DefaultConfigFile, err)
 		os.Exit(-2)
@@ -829,6 +829,12 @@ func main() {
 	clog.SetLogLevel(config.Settings.LogLevel)
 	if !config.Settings.LogFile.IsNull() {
 		clog.AddWriter(clog.NewFileLogWriter(config.Settings.LogFile.String()))
+	}
+
+	if config_loaded {
+		clog.Debug("Configuration file '%s' was loaded.", config.DefaultConfigFile)
+	} else {
+		clog.Debug("Configuration file '%s' was not found.", config.DefaultConfigFile)
 	}
 
 	if command.Processor == nil {

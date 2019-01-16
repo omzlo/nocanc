@@ -200,16 +200,16 @@ var Settings = DefaultSettings
 
 var DefaultConfigFile *helpers.FilePath = helpers.HomeDir().Append(".nocanc.conf")
 
-func Load() error {
+func Load() (bool, error) {
 
 	if !DefaultConfigFile.Exists() {
 		// no config file found, continue normally.
-		return nil
+		return false, nil
 	}
 
 	if _, err := toml.DecodeFile(DefaultConfigFile.String(), &Settings); err != nil {
-		return err
+		return true, err
 	}
 
-	return nil
+	return true, nil
 }
