@@ -7,8 +7,10 @@ import (
 	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
 	"github.com/omzlo/gomqtt-mini-client"
+	"github.com/omzlo/nocanc/client"
 	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
+	"github.com/omzlo/nocanc/webui"
 	"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/helpers"
 	"github.com/omzlo/nocand/models/nocan"
@@ -57,6 +59,12 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 	fs.StringVar(&config.Settings.Mqtt.ClientId, "client-id", config.DefaultSettings.Mqtt.ClientId, "MQTT client identifier")
 	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
 	fs.Var(&config.Settings.Mqtt.Subscribers, "subscribers", "List of topics to subscribe from the mqtt server")
+	return fs
+}
+
+func WebuiFlagSet(cmd string) *flag.FlagSet {
+	fs := BaseFlagSet(cmd)
+	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.DefaultSettings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
 	return fs
 }
 
@@ -416,32 +424,25 @@ func list_channels_cmd(fs *flag.FlagSet) error {
 
 func list_nodes_cmd(fs *flag.FlagSet) error {
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	sl := socket.NewSubscriptionList(socket.NodeListEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-	if err = conn.Put(socket.NodeListRequestEvent, nil); err != nil {
-		return err
-	}
-
-	value, err := conn.WaitFor(socket.NodeListEvent)
+	nl, err := client.ListNodes()
 
 	if err != nil {
-		return err
-	}
-
-	var nl socket.NodeList
-	if err = nl.UnpackValue(value); err != nil {
-		return err
+		return err.GoError()
 	}
 	clog.Debug("Listing %d nodes.", len(nl.Nodes))
 	fmt.Println(nl)
+	return nil
+}
+
+func device_info_cmd(fs *flag.FlagSet) error {
+
+	di, err := client.GetDeviceInformation()
+
+	if err != nil {
+		return err.GoError()
+	}
+	clog.Debug("Fetching device information.")
+	fmt.Println(di)
 	return nil
 }
 
@@ -755,6 +756,14 @@ func version_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+func webui_cmd(fs *flag.FlagSet) error {
+	if config.Settings.CheckForUpdates {
+		go client.UpdateLatestNews(NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
+	}
+	client.StartDefaultJobManager()
+	return webui.Run(config.Settings.Webui.WebServer)
+}
+
 func help_cmd(fs *flag.FlagSet) error {
 	xargs := fs.Args()
 
@@ -785,6 +794,7 @@ func help_cmd(fs *flag.FlagSet) error {
 
 var Commands = helpers.CommandFlagSetList{
 	{"blynk", blynk_cmd, BlynkFlagSet, "blynk [options]", "Connect to a blynk server (see https://www.blynk.cc/)"},
+	{"device-info", device_info_cmd, BaseFlagSet, "device-info [options]", "Get information about the device/hardware."},
 	{"download", download_cmd, DownloadFlagSet, "download [options] <filename> <node_id>", "Download firmware from node"},
 	{"help", nil, EmptyFlagSet, "help <command>", "Provide help about a command, or general help if no command is specified"},
 	{"list-channels", list_channels_cmd, BaseFlagSet, "list-channels [options]", "List all channels"},
@@ -797,6 +807,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
+	{"webui", webui_cmd, WebuiFlagSet, "webui", "Run web interface"},
 }
 
 func main() {

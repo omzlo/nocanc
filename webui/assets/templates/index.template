@@ -1,0 +1,135 @@
+{{template "_header" . }}
+<main>
+    <div class="container">
+        <div class="row">
+            <div class="twelve columns orange pad center-text">
+                <a href="/system">
+                    <h2>System <span id="system">unreachable</span></h2>
+                    <p id="system_info">System is not in a defined state.</p>
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="four columns green pad">
+                <table class="u-full-width">
+                    <caption><h3>Nodes</h3></caption>
+                <thead>
+                    <tr>
+                        <th>Id</th>
+                        <th>State</th>
+                    </tr>
+                </thead>
+                <tbody id="nodes">
+                </tbody>
+                </table>
+            </div>
+            <div class="eight columns blue pad">
+                <table class="u-full-width">
+                    <caption><h3>Channels</h3></caption>
+                <thead>
+                    <tr>
+                        <th>Id</th>
+                        <th>Name</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody id="channels">
+                </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row">
+            <div class="twelve columns grey pad hidden" id="info">
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<script type="text/javascript">
+    function pluralize(singular, plural, count) {
+        count = count || 0;
+        plural = plural || singular
+        switch (count) {
+            case 0:
+                return "no " + plural;
+            case 1:
+                return "1 " + singular;
+            default:
+                return count + " " + plural;
+        }
+    }
+
+function sort_by_id(a, b) {
+    return a.id - b.id;
+}
+
+function update_page() {
+    $.ajax({
+        url: "/api/v1/channels", 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $('#channels').empty()
+            json.channels.sort(sort_by_id).forEach(function(channel) {
+                $('#channels').append('<tr><td><a class="nid" href="/channels/' + channel.id + '">' + channel.id + '</a></td><td>' + channel.name + '</td><td>' + channel.value + '</td></tr>')
+            });         
+        })
+        .fail(function(xhr, status, err) {
+            $("#channels").html("No channels found");
+        })
+
+    $.ajax({
+        url: "/api/v1/nodes", 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $('#nodes').empty()
+            json.nodes.sort(sort_by_id).forEach(function(node) {
+                $('#nodes').append('<tr><td><a class="nid" href="/nodes/' + node.id + '">' + node.id + '</a></td><td>' + node.state + '</td></tr>')
+            });
+        })
+        .fail(function(xhr, status, err) {
+            $("#nodes").html("No nodes found");
+        })
+
+    $.ajax({
+        url: "/api/v1/power_status",
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json){
+            $("#system").html(json.status)
+            $("#system_info").html("Voltage: " + json.voltage.toFixed(1) + "V, Current sense: " + json.current_sense)
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#system").html("unreachable")
+            $("#system_info").html(json.error)
+        })
+
+}
+function update_info() {
+    $.ajax({ 
+        url: "/api/v1/news",
+        type: "GET",
+        dataType: "json",
+    })  
+        .done(function(json) {
+            if (json.loaded && json.html!="") {
+               $('#info').html(json.html)
+               $('#info').fadeIn()
+            }
+        })
+}
+$(document).ready(function() {
+    update_page()
+    update_info()
+    setInterval(update_page, 5000); 
+});
+</script>
+
+{{template "_footer" . }}

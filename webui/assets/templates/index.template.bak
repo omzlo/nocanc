@@ -1,0 +1,90 @@
+{{template "_header" . }}
+<main>
+    <div class="container">
+        <div class="row">
+            <div class="twelve columns orange pad">
+                <a href="/system">
+                    <h2>System <span id="system">unreachable</span></h2>
+                    <p id="system_info">System is not in a defined state.</p>
+                </a>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="six columns green pad">
+                <a href="/nodes">
+                    <h2 id="nodes">No nodes</h2>
+                </a>
+            </div>
+            <div class="six columns blue pad">
+                <a href="/channels">
+                    <h2 id="channels">No channel</h2>
+                </a>
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<script type="text/javascript">
+    function pluralize(singular, plural, count) {
+        count = count || 0;
+        plural = plural || singular
+        switch (count) {
+            case 0:
+                return "no " + plural;
+            case 1:
+                return "1 " + singular;
+            default:
+                return count + " " + plural;
+        }
+    }
+
+function update_page() {
+    $.ajax({
+        url: "/api/v1/channels", 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $("#channels").html(pluralize("channel","channels",json.channels.length));
+        })
+        .fail(function(xhr, status, err) {
+            $("#channels").html(pluralize("channel","channels"));
+        })
+
+    $.ajax({
+        url: "/api/v1/nodes", 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $("#nodes").html(pluralize("node","nodes",json.nodes.length));
+        })
+        .fail(function(xhr, status, err) {
+            $("#nodes").html(pluralize("node","nodes"));
+        })
+
+    $.ajax({
+        url: "/api/v1/power_status",
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json){
+            $("#system").html(json.status)
+            $("#system_info").html("Voltage: " + json.voltage.toFixed(1) + "V, Current sense: " + json.current_sense)
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#system").html("unreachable")
+            $("#system_info").html(json.error)
+        })
+
+}
+$(document).ready(function() {
+    update_page()
+    setInterval(update_page, 5000); 
+});
+</script>
+
+{{template "_footer" . }}
