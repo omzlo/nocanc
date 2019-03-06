@@ -1,0 +1,151 @@
+//@import url('https://fonts.googleapis.com/css?family=Roboto:400,500');
+
+body {
+    font-family: 'Helvetica', sans-serif;
+    color: #333;
+}
+
+header {
+    border-bottom: solid 1px #DDD;
+    background-color: #F7F7F7;
+    /*box-shadow: 0px 4px 5px grey;*/
+    margin-bottom: 2em;
+}
+
+header ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+}
+
+header li {
+    display: inline;
+}
+
+main .container {
+    margin-bottom: 16px;
+    margin-top: 16px;
+}
+
+main .row {
+    padding-bottom: 16px;
+}
+
+.pad {
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 1em;
+    color: #EEE;
+    /*box-shadow: 4px 4px 5px grey;*/
+}
+
+.pad input {
+    color: black;
+}
+
+.pad a {
+    color: #EEE;
+    text-decoration: none;
+}
+
+.pad a:hover {
+    color: #FFF;
+    text-decoration: underline;
+}
+
+.pad table {
+    color: #EEE;
+}
+
+.pad th, .pad td {
+    padding: 8px;
+}
+
+.pad tr:nth-child(even) {
+    background: rgba(255,255,255,0.1);
+}
+
+.pad form {
+    margin-block-end: 0em;
+}
+
+.pad input {
+    margin-bottom: 0;
+}
+
+a.nid {
+    display: block;
+    width: 2rem;
+    text-decoration: none;
+    background: #EEE;
+    color: black;
+    border-radius: 4px;
+    padding: 0px 4px;
+    font-weight: bold;
+    text-align: center;
+}
+
+a:hover.nid {
+    text-decoration: none;
+    color: #FFF;
+    background-color: #333;
+}
+
+.pad h2 {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.orange {
+    background-color: #e68a00; 
+    color: white;
+}
+
+.blue {
+    background-color: #2151a2;
+    color: white;
+}
+
+.green {
+    background-color: #373;
+    color: white;
+}
+
+.red {
+     background-color: #711;
+}
+
+.grey {
+    background-color: #777;
+}
+
+.center-text {
+    text-align: center;
+}
+
+.mono {
+    font-family: "Lucida Console", Monaco, monospace;
+}
+
+code {
+    background-color:rgba(0,0,0,0.2);
+    border: rgba(0,0,0,0.1);
+}
+
+.hidden {
+    display: none;
+}
+
+#progress_box {
+    border: 1px solid black; 
+    margin: 0.5em 0;
+    border-radius: 8px;
+}
+
+#progress {
+    background-color: black; 
+    padding: 0; 
+    width: 0%; 
+    height: 1.5em;
+    text-align: center;
+}

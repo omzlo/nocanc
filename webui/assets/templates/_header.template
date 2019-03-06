@@ -1,0 +1,30 @@
+<html>
+    <head>
+        <link href="/static/stylesheets/normalize.css" rel="stylesheet">
+        <link href="/static/stylesheets/skeleton.css" rel="stylesheet">
+        <link href="/static/stylesheets/nocanc.css" rel="stylesheet">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script src="/static/js/jquery.js"></script>
+    </head>
+    <body>
+         <noscript>
+            <div class="row">
+                <div class="twelve columns red pad">
+                    Please enable Javascript to use this application
+                </div>
+            </div>
+        </noscript>
+
+        <header>
+            <div class="container">
+                <div class="row">
+                    <div class="ten columns">
+                        <ul>
+                            <li><a href="/">Home</a> | </li>
+                            <li><a href="https://www.omzlo.com/the-nocan-platform">omzlo.com</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </header>
+

@@ -1,0 +1,83 @@
+{{template "_header" . }}
+<main>
+<div class="container">
+    <div class="row">
+        <div class="twelve columns blue pad">
+            <table class="u-full-width">
+                <caption><h2>Channel {{ .Params.id }}</h2></caption>
+                <thead>
+                </thead>
+                <tbody>
+                    <tr><td><b>Id</b></td><td id="channel_id" class="mono"></td></tr>
+                    <tr><td><b>Name</b></td><td id="channel_name" class="mono"></td></tr>
+                    <tr><td><b>Current value</b></td>
+                        <td id="channel_value" class="mono"></td>
+                    </tr>
+                    <tr><td><b>New value</b></td>
+                        <td>
+                            <form id="channel_value_update">
+                               <input type="text" name="value" id="new_channel_value" class="u-full-width mono">
+                            </form>
+                        </td>
+                 </tbody>
+            </table>
+            <p id="channel_status" class="center-text"></p>
+        </div>
+    </div>
+</div>
+</main>
+<script>
+    function add_channel(chan) {
+        elt = $("#c" + chan.id);
+        content = '<div class="twelve columns blue pad"><a href="/channels/' + chan.id + '"><h3><b>' + chan.id + ':</b> ' + chan.name + '</h3><p>' + chan.value + '</p></a></div>';
+        if (elt.length>0) {
+            elt.html(content);
+        } else {
+            block = '<div class="row" id="c' + chan.id +'">' + content + '</div>'
+            $('#channels').append(block);
+        }
+    }
+function update_page() {
+    $.ajax({
+        url: "/api/v1" + window.location.pathname, 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $("#channel_status").empty() 
+            $("#channel_id").html(json.id);
+            $("#channel_name").html(json.name);
+            $("#channel_value").html(json.value);
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#channel_status").html("Update failed: server returned " + json.error);
+        })
+}
+
+function submit_handler(event) {
+    event.preventDefault();
+    var formData = JSON.stringify({ value: $("#new_channel_value").val() }); 
+
+    $.ajax({
+        url: "/api/v1" + window.location.pathname,
+        type: "PUT",
+        contentType: "application/json",
+        data: formData,
+    })
+        .done(function(json) {
+            update_page()
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#channel_status").html("Publish failed: server returned " + json.error);
+        })
+}
+
+$(document).ready(function() {
+    update_page()
+    setInterval(update_page, 5000); 
+    $("#channel_value_update").submit(submit_handler);
+});
+</script>
+{{template "_footer" . }}

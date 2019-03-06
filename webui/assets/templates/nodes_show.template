@@ -1,0 +1,132 @@
+{{template "_header" . }}
+<main>
+<div class="container">
+    <div class="row" id="error" style="display: none;">
+        <div class="twelve columns red pad" id="error_msg">
+        </div>
+    </div>
+    <div class="row">
+        <div class="twelve columns green pad">
+            <table class="u-full-width">
+                <caption><h2>Node {{ .Params.id }}</h2></caption>
+                <thead>
+                </thead>
+                <tbody>
+                    <tr><td><b>Id</b></td><td id="node_id" class="mono"></td></tr>
+                    <tr><td><b>Udid</b></td><td id="node_udid" class="mono"></td></tr>
+                    <tr><td><b>State</b></td><td id="node_state" class="mono"></td></tr>
+                    <tr><td><b>Last seen</b></td><td id="node_last_seen" class="mono"></td></tr>
+                    <tr><td><b>Firmware</b></td>
+                        <td>
+                            <form enctype="multipart/form-data" id="upload_firmware">
+                               <input type="file" name="firmware" id="firmware">
+                               <input type="submit" value="Upload Firmware" name="submit" id="submit_firmware">
+                            </form>
+                            <div class="hidden" id="progress_box">
+                                <div id="progress"></div>
+                            </div>
+                        </td>
+                 </tbody>
+            </table>
+            <p id="node_status" class="center-text"></p>
+        </div>
+    </div>
+</div>
+</main>
+<script>
+job_url = false
+job_fun = false
+
+function upload_progress() {
+    $.ajax({
+        url: job_url,
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            switch (json.status) {
+                case "running":
+                    width = json.progress + "%";
+                    $("#progress").width(width)
+                    $("#progress").html(width);
+                    break;
+                case "success":
+                    $("#progress").width("100%")
+                    $("#progress").html("Done!");
+                    clearInterval(job_fun);
+                    setTimeout(function() {
+                        $("#progress_box").fadeOut();
+                    }, 3000);
+                    $("input").prop('disabled', false);
+                    break;
+                case "error":
+                    $("#progress").html("Failed: " + json.error)
+                    clearInterval(job_fun)
+                    $("input").prop('disabled', false);
+                    break;
+            }
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#node_status").html("Firmware upload failed: server returned " + json.error);
+            clearInterval(job_fun);
+            $("input").prop('disabled', false);
+        })
+}
+
+
+function submit_firmware(event) {
+    event.preventDefault();
+    $("#progress_box").fadeIn(); 
+    $.ajax({
+        url: "/api/v1" + window.location.pathname + "/upload",
+        type: "POST",
+        data: new FormData(this),
+        cache: false,
+        contentType: false,
+        processData: false,
+        dataType: "json",
+    })
+        .done(function(json) {
+            $("input").prop('disabled', true);
+            job_url = json.location
+            job_fun = setInterval(upload_progress, 500)
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#node_status").html("Firmware upload failed: server returned " + json.error);
+        })
+
+}
+function update_page() {
+    $.ajax({
+        url: "/api/v1" + window.location.pathname, 
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json) {
+            $("#node_status").empty() 
+            $("#node_id").html(json.id);
+            $("#node_udid").html(json.udid);
+            $("#node_state").html(json.state);
+            $("#node_last_seen").html(json.last_seen);
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#node_status").html("Update failed: server returned " + json.error);
+            $("#node_state").html("disconnected");
+        })
+}
+
+$(document).ready(function() {
+    if(typeof window.FormData === 'undefined') {
+        $("#error_msg").html("<b>Warning:</b> Your browser does not support HTML5 uploads, and firmware upload might not work.")
+        $("#error").fadeIn()
+    }
+    update_page()
+    setInterval(update_page, 3000);
+    $("#upload_firmware").submit(submit_firmware);
+    
+});
+</script>
+{{template "_footer" . }}

@@ -6,6 +6,7 @@ import (
 	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
 	"github.com/omzlo/nocand/models/helpers"
+	"github.com/omzlo/nocand/socket"
 	"strconv"
 	"strings"
 )
@@ -164,12 +165,17 @@ type MqttConfiguration struct {
 	Subscribers MqttMap `toml:"subscribers"`
 }
 
+type WebuiConfiguration struct {
+	WebServer string `toml:"web-server"`
+}
+
 type Configuration struct {
 	EventServer       string `toml:"event-server"`
 	AuthToken         string `toml:"auth-token"`
 	DownloadSizeLimit uint   `toml:"download-size-limit"`
 	Blynk             BlynkConfiguration
 	Mqtt              MqttConfiguration
+	Webui             WebuiConfiguration
 	CheckForUpdates   bool              `toml:"check-for-updates"`
 	LogTerminal       string            `toml:"log-terminal"`
 	LogLevel          clog.LogLevel     `toml:"log-verbosity"`
@@ -188,6 +194,9 @@ var DefaultSettings = Configuration{
 	Mqtt: MqttConfiguration{
 		ClientId:   "com.omzlo.mqtt.nocanc",
 		MqttServer: "mqtt://localhost",
+	},
+	Webui: WebuiConfiguration{
+		WebServer: ":8080",
 	},
 	CheckForUpdates: true,
 	LogLevel:        clog.INFO,
@@ -212,4 +221,18 @@ func Load() (bool, error) {
 	}
 
 	return true, nil
+}
+
+/***/
+
+func DialNocanServer() (*socket.EventConn, error) {
+	clog.DebugXX("Trying to connect to NoCAN event server '%s'", Settings.EventServer)
+
+	conn, err := socket.Dial(Settings.EventServer, Settings.AuthToken)
+	if err != nil {
+		clog.Warning("Failed to connect to '%s', %s", Settings.EventServer, err)
+		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
+	}
+	clog.DebugX("Connected to NoCAN event server '%s'", Settings.EventServer)
+	return conn, nil
 }

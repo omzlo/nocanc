@@ -1,0 +1,57 @@
+{{template "_header" . }}
+<main>
+<div class="container">
+    <div class="row">
+        <div class="twelve columns orange pad">
+            <table class="u-full-width">
+                <caption><h2>System</h2></caption>
+                <thead>
+                </thead>
+                <tbody>
+                    <tr><td><b>Status</b></td><td id="system_status" class="mono"></td></tr>
+                    <tr><td><b>Voltage</b></td><td id="system_voltage" class="mono"></td></tr>
+                    <tr><td><b>Current sense</b></td><td id="system_current" class="mono"></td></tr>
+                    <tr><td><b>Firmware version</b></td><td id="device_version" class="mono"></td></tr>
+                    <tr><td><b>Chip ID</b></td><td id="device_cid" class="mono"></td></tr>
+                 </tbody>
+            </table>
+            <p id="channel_status" class="center-text"></p>
+        </div>
+    </div>
+</div>
+</main>
+<script>
+
+function update_page() {
+    $.ajax({
+        url: "/api/v1/power_status",
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json){
+            $("#system_status").html(json.status)
+            $("#system_voltage").html(json.voltage.toFixed(1) + "V")
+            $("#system_current").html(json.current_sense)
+        })
+        .fail(function(xhr, status, err) {
+            var json = JSON.parse(xhr.responseText);
+            $("#system_status").html("unreachable")
+        })
+
+    $.ajax({
+        url: "/api/v1/device_info",
+        type: "GET",
+        dataType: "json",
+    })
+        .done(function(json){
+            $("#device_version").html(json.version_major + "." + json.version_minor)
+            $("#device_cid").html(json.chip_id.match(/.{1,2}/g).join(" "))
+        })
+}
+
+$(document).ready(function() {
+    update_page()
+    setInterval(update_page, 3000); 
+});
+</script>
+{{template "_footer" . }}
