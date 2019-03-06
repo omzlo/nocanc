@@ -139,6 +139,6 @@ func Run(addr string) error {
 	mux.Handle("GET /static/*", SimpleHandler(http.StripPrefix("/static", http.FileServer(static_files))))
 	mux.HandleFunc("GET /*", default_handler)
 
-	clog.Info("Connect to the Webui at http://localhost%s/", addr)
+	clog.Info("Connect to the Webui at %s", addr)
 	return http.ListenAndServe(addr, mux)
 }

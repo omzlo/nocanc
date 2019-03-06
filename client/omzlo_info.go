@@ -26,7 +26,7 @@ func UpdateLatestNews(version string, os string, arch string) {
 		return
 	}
 
-	url := fmt.Sprintf("http://paris:3000/software_update?i=%s&cv=%s&o=%s&a=%s&c=webui",
+	url := fmt.Sprintf("https://www.omzlo.com/software_update?i=%s&cv=%s&o=%s&a=%s&c=webui",
 		base64.StdEncoding.EncodeToString(di.ChipId[:]),
 		version,
 		os,
