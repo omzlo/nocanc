@@ -4,3 +4,5 @@ cmd/nocanc
 .DS_Store
 *.hex
 *.o
+cmd/packrd/packed-packr.go
+webui/webui-packr.go
