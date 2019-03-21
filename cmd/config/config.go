@@ -196,7 +196,7 @@ var DefaultSettings = Configuration{
 		MqttServer: "mqtt://localhost",
 	},
 	Webui: WebuiConfiguration{
-		WebServer: ":8080",
+		WebServer: "localhost:8080",
 	},
 	CheckForUpdates: true,
 	LogLevel:        clog.INFO,

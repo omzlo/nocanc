@@ -434,6 +434,44 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 	return nil
 }
 
+func arduino_discovery_cmd(fs *flag.FlagSet) error {
+	var input string
+
+	for {
+		var err error
+
+		fmt.Scanln(&input)
+
+		switch input {
+		case "START_SYNC":
+			for {
+				err = client.ArduinoDiscoverNodesSync(func(json string) {
+					fmt.Println(json)
+				})
+				if err != nil {
+					fmt.Println(client.ArduinoDiscoverError(err.Error()))
+					time.Sleep(15 * time.Second)
+				}
+			}
+		case "START":
+			// do nothing
+			continue
+		case "STOP":
+			return nil
+		case "LIST":
+			json, err := client.ArduinoDiscoverNodes()
+			if err != nil {
+				fmt.Println(client.ArduinoDiscoverError(err.Error()))
+			} else {
+				fmt.Println(json)
+			}
+		default:
+			fmt.Println(client.ArduinoDiscoverError(input + " not supported"))
+		}
+	}
+	return nil
+}
+
 func device_info_cmd(fs *flag.FlagSet) error {
 
 	di, err := client.GetDeviceInformation()
@@ -793,6 +831,7 @@ func help_cmd(fs *flag.FlagSet) error {
 }
 
 var Commands = helpers.CommandFlagSetList{
+	{"arduino-discovery", arduino_discovery_cmd, BaseFlagSet, "arduino-discovery [options]", "For Arduino IDE"},
 	{"blynk", blynk_cmd, BlynkFlagSet, "blynk [options]", "Connect to a blynk server (see https://www.blynk.cc/)"},
 	{"device-info", device_info_cmd, BaseFlagSet, "device-info [options]", "Get information about the device/hardware."},
 	{"download", download_cmd, DownloadFlagSet, "download [options] <filename> <node_id>", "Download firmware from node"},
