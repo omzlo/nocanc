@@ -40,7 +40,9 @@
             </div>
         </div>
         <div class="row">
-            <div class="twelve columns grey pad hidden" id="info">
+            <div class="twelve columns grey pad hidden info" id="info">
+              <div class="info">
+              </div>
             </div>
         </div>
 
@@ -120,7 +122,7 @@ function update_info() {
     })  
         .done(function(json) {
             if (json.loaded && json.html!="") {
-               $('#info').html(json.html)
+               $('#info').first().html(json.html)
                $('#info').fadeIn()
             }
         })

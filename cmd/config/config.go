@@ -177,6 +177,7 @@ type Configuration struct {
 	Mqtt              MqttConfiguration
 	Webui             WebuiConfiguration
 	CheckForUpdates   bool              `toml:"check-for-updates"`
+	UpdateUrl         string            `toml:"update-url"`
 	LogTerminal       string            `toml:"log-terminal"`
 	LogLevel          clog.LogLevel     `toml:"log-verbosity"`
 	LogFile           *helpers.FilePath `toml:"log-file"`
@@ -199,6 +200,7 @@ var DefaultSettings = Configuration{
 		WebServer: "localhost:8080",
 	},
 	CheckForUpdates: true,
+	UpdateUrl:       "https://www.omzlo.com/software_update",
 	LogLevel:        clog.INFO,
 	LogTerminal:     "plain",
 	LogFile:         helpers.NewFilePath(),
@@ -209,18 +211,25 @@ var Settings = DefaultSettings
 
 var DefaultConfigFile *helpers.FilePath = helpers.HomeDir().Append(".nocanc.conf")
 
-func Load() (bool, error) {
-
-	if !DefaultConfigFile.Exists() {
+func loadFile(file_path *helpers.FilePath) (bool, error) {
+	if !file_path.Exists() {
 		// no config file found, continue normally.
 		return false, nil
 	}
 
-	if _, err := toml.DecodeFile(DefaultConfigFile.String(), &Settings); err != nil {
+	if _, err := toml.DecodeFile(file_path.String(), &Settings); err != nil {
 		return true, err
 	}
 
 	return true, nil
+}
+
+func LoadFile(fname string) (bool, error) {
+	return loadFile(helpers.NewFilePath(fname))
+}
+
+func LoadDefault() (bool, error) {
+	return loadFile(DefaultConfigFile)
 }
 
 /***/

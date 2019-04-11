@@ -19,6 +19,7 @@ import (
 	"path"
 	"runtime"
 	"strconv"
+	"strings"
 	"text/template"
 	"time"
 )
@@ -27,26 +28,29 @@ import (
 
 var (
 	NOCANC_VERSION string = "Undefined"
+	dummy          string
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
-	return flag.NewFlagSet(cmd, flag.ExitOnError)
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	fs.StringVar(&dummy, "config", "", "Alternate configuration file")
+	return fs
 }
 
 func BaseFlagSet(cmd string) *flag.FlagSet {
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-	fs.StringVar(&config.Settings.EventServer, "event-server", config.DefaultSettings.EventServer, "Address of event server")
-	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.DefaultSettings.AuthToken, "Authentication key")
+	fs.StringVar(&config.Settings.EventServer, "event-server", config.Settings.EventServer, "Address of event server")
+	fs.StringVar(&config.Settings.AuthToken, "auth-token", config.Settings.AuthToken, "Authentication key")
 	fs.Var(&config.Settings.LogLevel, "log-level", "Log verbosity level (DEBUGXX, DEBUGX, DEBUG, INFO, WARNING, ERROR or NONE)")
-	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.DefaultSettings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
+	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.Settings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
 	fs.Var(config.Settings.LogFile, "log-file", "Name of file where logs are stored. Empty value dissables the log file (default is '').")
 	return fs
 }
 
 func BlynkFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Blynk.BlynkServer, "blynk-server", config.DefaultSettings.Blynk.BlynkServer, "Address of blynk server")
-	fs.StringVar(&config.Settings.Blynk.BlynkToken, "blynk-token", config.DefaultSettings.Blynk.BlynkToken, "Blynk authentication token value")
+	fs.StringVar(&config.Settings.Blynk.BlynkServer, "blynk-server", config.Settings.Blynk.BlynkServer, "Address of blynk server")
+	fs.StringVar(&config.Settings.Blynk.BlynkToken, "blynk-token", config.Settings.Blynk.BlynkToken, "Blynk authentication token value")
 	fs.Var(&config.Settings.Blynk.Notifiers, "notifiers", "List of channels to use for blynk notifications (experimental)")
 	fs.Var(&config.Settings.Blynk.Readers, "readers", "list of reader mappings")
 	fs.Var(&config.Settings.Blynk.Writers, "writers", "list of writer mappings")
@@ -55,8 +59,8 @@ func BlynkFlagSet(cmd string) *flag.FlagSet {
 
 func MqttFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.DefaultSettings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
-	fs.StringVar(&config.Settings.Mqtt.ClientId, "client-id", config.DefaultSettings.Mqtt.ClientId, "MQTT client identifier")
+	fs.StringVar(&config.Settings.Mqtt.MqttServer, "mqtt-server", config.Settings.Mqtt.MqttServer, "URL of mqtt server (e.g. mqtts://user:password@example.com)")
+	fs.StringVar(&config.Settings.Mqtt.ClientId, "client-id", config.Settings.Mqtt.ClientId, "MQTT client identifier")
 	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
 	fs.Var(&config.Settings.Mqtt.Subscribers, "subscribers", "List of topics to subscribe from the mqtt server")
 	return fs
@@ -64,19 +68,20 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 
 func WebuiFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.DefaultSettings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
+	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
 	return fs
 }
 
 func DownloadFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.UintVar(&config.Settings.DownloadSizeLimit, "download-size-limit", config.DefaultSettings.DownloadSizeLimit, "Download size limit")
+	fs.UintVar(&config.Settings.DownloadSizeLimit, "download-size-limit", config.Settings.DownloadSizeLimit, "Download size limit")
 	return fs
 }
 
 func VersionFlagSet(cmd string) *flag.FlagSet {
 	fs := EmptyFlagSet(cmd)
-	fs.BoolVar(&config.Settings.CheckForUpdates, "check-for-updates", config.DefaultSettings.CheckForUpdates, "Check if a new version of nocanc is available")
+	fs.BoolVar(&config.Settings.CheckForUpdates, "check-for-updates", config.Settings.CheckForUpdates, "Check if a new version of nocanc is available")
+	fs.StringVar(&config.Settings.UpdateUrl, "update-url", config.Settings.UpdateUrl, "URL prefix that will be used to check if updates are available")
 	return fs
 }
 
@@ -796,7 +801,7 @@ func version_cmd(fs *flag.FlagSet) error {
 
 func webui_cmd(fs *flag.FlagSet) error {
 	if config.Settings.CheckForUpdates {
-		go client.UpdateLatestNews(NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
+		go client.UpdateLatestNews("webui", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
 	}
 	client.StartDefaultJobManager()
 	return webui.Run(config.Settings.Webui.WebServer)
@@ -849,19 +854,54 @@ var Commands = helpers.CommandFlagSetList{
 	{"webui", webui_cmd, WebuiFlagSet, "webui", "Run web interface"},
 }
 
+func CheckForConfigFlag() (bool, string) {
+	for k, opt := range os.Args {
+		if opt[0] == '-' {
+			opt = opt[1:]
+			if opt[0] == '-' {
+				opt = opt[1:]
+			}
+			if opt == "config" {
+				if k < len(os.Args)+1 {
+					return true, os.Args[k+1]
+				}
+			}
+			if strings.HasPrefix(opt, "config=") {
+				return true, strings.TrimPrefix(opt, "config=")
+			}
+		}
+	}
+	return false, ""
+}
+
 func main() {
+	var config_loaded bool
+	var err error
+
+	conf_opt, file := CheckForConfigFlag()
+
+	if conf_opt {
+		config_loaded, err = config.LoadFile(file)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error in configuration file %s: %s\r\n", file, err)
+			os.Exit(-2)
+		}
+		if config_loaded == false {
+			fmt.Fprintf(os.Stderr, "Cloud not load configuration file %s\r\n", file)
+			os.Exit(-2)
+		}
+	} else {
+		config_loaded, err = config.LoadDefault()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error in configuration file %s: %s\r\n", config.DefaultConfigFile, err)
+			os.Exit(-2)
+		}
+	}
 
 	command, fs, err := Commands.Parse()
-
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "# %s\r\n", err)
 		fmt.Fprintf(os.Stderr, "# type `%s help` for usage\r\n", path.Base(os.Args[0]))
-		os.Exit(-2)
-	}
-
-	config_loaded, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error in configuration file %s: %s\r\n", config.DefaultConfigFile, err)
 		os.Exit(-2)
 	}
 

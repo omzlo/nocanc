@@ -119,6 +119,10 @@ a:hover.nid {
     background-color: #777;
 }
 
+.info a {
+  text-decoration: underline;
+}
+
 .center-text {
     text-align: center;
 }
