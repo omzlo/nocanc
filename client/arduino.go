@@ -32,7 +32,7 @@ type ArduinoDiscoveryListEvent struct {
 func ArduinoDiscoverNodes() (string, error) {
 	nl, err := ListNodes()
 	if err != nil {
-		return "", err.GoError()
+		return "", err
 	}
 
 	port_list := &ArduinoDiscoveryListEvent{EventType: "list", Ports: make([]*ArduinoPortDescriptor, 0, 8)}

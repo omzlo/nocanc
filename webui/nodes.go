@@ -72,3 +72,19 @@ func nodes_upload(w http.ResponseWriter, req *http.Request, params *Parameters) 
 	w.Header().Add("Location", retval.Location)
 	JsonSendWithStatus(w, req, retval, http.StatusCreated)
 }
+
+func nodes_reboot(w http.ResponseWriter, req *http.Request, params *Parameters) {
+	nodeId, err := strconv.ParseUint(params.Value["id"], 0, 8)
+	if err != nil {
+		ErrorSend(w, req, client.BadRequest(err))
+		return
+	}
+	force := params.Value["force"] == "true"
+
+	cerr := client.RebootNode(int(nodeId), force)
+	if cerr != nil {
+		ErrorSend(w, req, cerr)
+		return
+	}
+	JsonSendWithStatus(w, req, nil, http.StatusNoContent)
+}

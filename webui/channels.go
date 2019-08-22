@@ -62,6 +62,7 @@ func channels_update(w http.ResponseWriter, req *http.Request, params *Parameter
 		ErrorSend(w, req, cerr)
 		return
 	}
+	JsonSendWithStatus(w, req, nil, http.StatusNoContent)
 }
 
 func parseChannel(w http.ResponseWriter, req *http.Request, params *Parameters) (nocan.ChannelId, bool) {

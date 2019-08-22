@@ -20,25 +20,25 @@ func StartDefaultJobManager() {
 	}
 }
 
-func ListNodes() (*socket.NodeList, *Error) {
+func ListNodes() (*socket.NodeList, *ExtendedError) {
 
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.NodeListEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.NodeListRequestEvent, nil); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.NodeListEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	nl := new(socket.NodeList)
@@ -48,24 +48,24 @@ func ListNodes() (*socket.NodeList, *Error) {
 	return nl, nil
 }
 
-func GetNode(nodeId uint) (*socket.NodeUpdate, *Error) {
+func GetNode(nodeId uint) (*socket.NodeUpdate, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.NodeUpdateEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.NodeUpdateRequestEvent, socket.NodeUpdateRequest(nodeId)); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.NodeUpdateEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	nu := new(socket.NodeUpdate)
@@ -79,25 +79,25 @@ func GetNode(nodeId uint) (*socket.NodeUpdate, *Error) {
 	return nu, nil
 }
 
-func ListChannels() (*socket.ChannelList, *Error) {
+func ListChannels() (*socket.ChannelList, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 
 	sl := socket.NewSubscriptionList(socket.ChannelListEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.ChannelListRequestEvent, nil); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.ChannelListEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	cl := new(socket.ChannelList)
@@ -109,24 +109,24 @@ func ListChannels() (*socket.ChannelList, *Error) {
 
 }
 
-func GetChannel(channelId nocan.ChannelId) (*socket.ChannelUpdate, *Error) {
+func GetChannel(channelId nocan.ChannelId) (*socket.ChannelUpdate, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest("", channelId)); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.ChannelUpdateEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	cu := new(socket.ChannelUpdate)
@@ -142,35 +142,38 @@ func GetChannel(channelId nocan.ChannelId) (*socket.ChannelUpdate, *Error) {
 
 }
 
-func UpdateChannel(channelId nocan.ChannelId, channelName string, channelValue []byte) *Error {
+func UpdateChannel(channelId nocan.ChannelId, channelName string, channelValue []byte) *ExtendedError {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return ServiceUnavailable(err)
+		return ExtendError(err)
 	}
 	defer conn.Close()
 
 	err = conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(channelName, channelId, socket.CHANNEL_UPDATED, channelValue))
-	return ServiceUnavailable(err)
+	if err != nil {
+		return ExtendError(err)
+	}
+	return nil
 }
 
-func GetPowerStatus() (*device.PowerStatus, *Error) {
+func GetPowerStatus() (*device.PowerStatus, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.BusPowerStatusUpdateEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.BusPowerStatusUpdateRequestEvent, nil); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.BusPowerStatusUpdateEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	ps := new(device.PowerStatus)
@@ -181,7 +184,7 @@ func GetPowerStatus() (*device.PowerStatus, *Error) {
 	return ps, nil
 }
 
-func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater) (*Job, *Error) {
+func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater) (*Job, *ExtendedError) {
 
 	upload_request := socket.NewNodeFirmware(nocan.NodeId(nodeId), false)
 	for _, block := range firmware.Blocks {
@@ -194,16 +197,16 @@ func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater
 
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	sl := socket.NewSubscriptionList(socket.NodeFirmwareDownloadEvent, socket.NodeFirmwareProgressEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	if err = conn.Put(socket.NodeFirmwareUploadEvent, upload_request); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	job := DefaultJobManager.NewJob(updater)
@@ -245,24 +248,24 @@ func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater
 	return job, nil
 }
 
-func GetDeviceInformation() (*device.Info, *Error) {
+func GetDeviceInformation() (*device.Info, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.DeviceInformationEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.DeviceInformationRequestEvent, nil); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.DeviceInformationEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	di := new(device.Info)
@@ -273,24 +276,24 @@ func GetDeviceInformation() (*device.Info, *Error) {
 	return di, nil
 }
 
-func GetSystemProperties() (*properties.Properties, *Error) {
+func GetSystemProperties() (*properties.Properties, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	defer conn.Close()
 	sl := socket.NewSubscriptionList(socket.SystemPropertiesEvent)
 	if err = conn.Subscribe(sl); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 	if err = conn.Put(socket.SystemPropertiesRequestEvent, nil); err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	value, err := conn.WaitFor(socket.SystemPropertiesEvent)
 
 	if err != nil {
-		return nil, ServiceUnavailable(err)
+		return nil, ExtendError(err)
 	}
 
 	sp := properties.New()
@@ -299,4 +302,27 @@ func GetSystemProperties() (*properties.Properties, *Error) {
 	}
 
 	return sp, nil
+}
+
+func RebootNode(nodeId int, force bool) *ExtendedError {
+
+	if nodeId > 127 || nodeId == 0 {
+		return BadRequest(fmt.Errorf("Node id must be between 1 and 127 included, but %d was provided.", nodeId))
+	}
+
+	request := socket.CreateNodeRebootRequest(nocan.NodeId(nodeId), force)
+
+	conn, err := config.DialNocanServer()
+	if err != nil {
+		return ExtendError(err)
+	}
+	defer conn.Close()
+
+	if err := conn.Put(socket.NodeRebootRequestEvent, request); err != nil {
+		return ExtendError(err)
+	}
+	if err := conn.GetAck(); err != nil {
+		return ExtendError(err).WithInformation(fmt.Sprintf("Node %d", nodeId))
+	}
+	return nil
 }

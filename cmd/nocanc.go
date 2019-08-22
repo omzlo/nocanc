@@ -29,6 +29,7 @@ import (
 var (
 	NOCANC_VERSION string = "Undefined"
 	dummy          string
+	forceFlag      bool = false
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -88,6 +89,12 @@ func VersionFlagSet(cmd string) *flag.FlagSet {
 func ReadChannelFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.BoolVar(&config.Settings.OnUpdate, "on-update", false, "Wait until channel is updated instead of returning last value immediately")
+	return fs
+}
+
+func RebootFlagSet(cmd string) *flag.FlagSet {
+	fs := BaseFlagSet(cmd)
+	fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
 	return fs
 }
 
@@ -432,7 +439,7 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 	nl, err := client.ListNodes()
 
 	if err != nil {
-		return err.GoError()
+		return err
 	}
 	clog.Debug("Listing %d nodes.", len(nl.Nodes))
 	fmt.Println(nl)
@@ -482,7 +489,7 @@ func device_info_cmd(fs *flag.FlagSet) error {
 	di, err := client.GetDeviceInformation()
 
 	if err != nil {
-		return err.GoError()
+		return err
 	}
 	clog.Debug("Fetching device information.")
 	fmt.Println(di)
@@ -716,7 +723,23 @@ func download_cmd(fs *flag.FlagSet) error {
 }
 
 func reboot_cmd(fs *flag.FlagSet) error {
-	panic("Unimplemented")
+	xargs := fs.Args()
+	if len(xargs) != 1 {
+		return fmt.Errorf("Expected one parameter: a numerical node identifier.")
+	}
+
+	nodeid, err := strconv.Atoi(xargs[0])
+
+	if err != nil {
+		return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
+	}
+
+	// Carefull to use xerr and not err
+	xerr := client.RebootNode(nodeid, forceFlag)
+	if xerr != nil {
+		return xerr
+	}
+	fmt.Println("OK")
 	return nil
 }
 
@@ -848,7 +871,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
 	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
 	{"read-channel", read_channel_cmd, ReadChannelFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
-	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
+	{"reboot", reboot_cmd, RebootFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
 	{"webui", webui_cmd, WebuiFlagSet, "webui", "Run web interface"},

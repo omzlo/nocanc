@@ -13,24 +13,31 @@ import (
 /* JSON STUFF */
 
 func JsonSendWithStatus(w http.ResponseWriter, req *http.Request, content interface{}, status int) {
-	s, err := json.MarshalIndent(content, "", "  ")
-	if err != nil {
-		s = []byte(fmt.Sprintf(`{ "status": 500, "error": "internal error", "information": %q }`, err))
-		status = 500
+	var s []byte
+	var err error
+
+	if content != nil {
+		s, err = json.MarshalIndent(content, "", "  ")
+		if err != nil {
+			s = []byte(fmt.Sprintf(`{ "status": 500, "error": "internal error", "information": %q }`, err))
+			status = 500
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	s = append(s, '\n')
-	w.Write(s)
+	if content != nil {
+		s = append(s, '\n')
+		w.Write(s)
+	}
 }
 
 func JsonSend(w http.ResponseWriter, req *http.Request, content interface{}) {
 	JsonSendWithStatus(w, req, content, 200)
 }
 
-func ErrorSend(w http.ResponseWriter, req *http.Request, e *client.Error) {
-	clog.Warning("Request to %s returns %d %s: %s", req.URL.Path, e.Status, e.Error, e.Information)
+func ErrorSend(w http.ResponseWriter, req *http.Request, e *client.ExtendedError) {
+	clog.Warning("Request to %s returns %d %s: %s", req.URL.Path, e.Status, e.ErrorMessage, e.Information)
 	JsonSendWithStatus(w, req, e, e.Status)
 }
 
@@ -91,7 +98,7 @@ func NewServeMux() *ServeMux {
 func (mux *ServeMux) Handle(pattern string, handler Handler) {
 	for _, hd := range mux.Patterns {
 		if hd.Pattern == pattern {
-			panic(fmt.Sprintf("Dupplicate pattern <%s> in mux.", pattern))
+			panic(fmt.Sprintf("Duplicate pattern <%s> in mux.", pattern))
 		}
 	}
 
@@ -134,6 +141,16 @@ func pat_match(req *http.Request, pat string) (bool, *Parameters) {
 	}
 	if len(src_parts) != len(pat_parts) {
 		return false, nil
+	}
+
+	query := req.URL.Query()
+	for k, v := range query {
+		if _, ok := params.Value[k]; !ok {
+			params.Value[k] = strings.Join(v, ",")
+		} else {
+			clog.DebugXX("Query string contains parameter '%s' already included in pattern '%s'.", k, pat)
+			return false, nil
+		}
 	}
 	return true, params
 }
@@ -180,7 +197,6 @@ func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logger := NewLogResponseWriter(w)
-	// clog.Debug("Request '%s %s' matches pattern <%s>, with %v", r.Method, r.URL.Path, pattern, params.Value)
 	handler.ServeHTTP(logger, r, params)
 	clog.Info("%s \"%s %s\" [%s] %d %d", r.RemoteAddr, r.Method, r.URL.Path, params, logger.StatusCode, logger.TotalBytes)
 

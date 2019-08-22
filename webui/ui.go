@@ -123,6 +123,7 @@ func Run(addr string) error {
 	mux.HandleFunc("GET /api/v1/nodes", nodes_index)
 	mux.HandleFunc("GET /api/v1/nodes/:id", nodes_show)
 	mux.HandleFunc("POST /api/v1/nodes/:id/upload", nodes_upload)
+	mux.HandleFunc("PUT /api/v1/nodes/:id/reboot", nodes_reboot)
 	mux.HandleFunc("GET /api/v1/channels", channels_index)
 	mux.HandleFunc("GET /api/v1/channels/:id", channels_show)
 	mux.HandleFunc("PUT /api/v1/channels/:id", channels_update)
