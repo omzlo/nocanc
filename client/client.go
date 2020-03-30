@@ -245,7 +245,7 @@ func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater
 	return job, nil
 }
 
-func GetDeviceInformation() (*device.Info, *Error) {
+func GetDeviceInformation() (*device.Information, *Error) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
 		return nil, ServiceUnavailable(err)
@@ -265,7 +265,7 @@ func GetDeviceInformation() (*device.Info, *Error) {
 		return nil, ServiceUnavailable(err)
 	}
 
-	di := new(device.Info)
+	di := new(device.Information)
 	if err = di.UnpackValue(value); err != nil {
 		return nil, InternalServerError(err)
 	}

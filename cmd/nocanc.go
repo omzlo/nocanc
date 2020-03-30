@@ -290,6 +290,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	if len(config.Settings.Mqtt.Subscribers) > 0 {
 		channel_sub := make(map[string]mqtt_mapping)
 
+		// We parse and setup the mapping bewteen MQTT topics and NoCAN channels
+
 		for _, subs := range config.Settings.Mqtt.Subscribers {
 
 			if len(subs.Transform) == 0 {
@@ -302,6 +304,9 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			channel_sub[subs.Topic] = mqtt_mapping{subs.Channel, template}
 			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
 		}
+
+		// SubscribeCallback is the function that gets alled when data is published on a MQTT channel
+		// we transfer the data to a NoCAN channel, using channel_sub as a mapping.
 
 		mqtt.SubscribeCallback = func(topic string, value []byte) {
 			tv := struct {
@@ -324,6 +329,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			}
 		}
 
+		// We make sure our MQTT client is subscribed to the relevant topics
+		// We only do this once connected, hence the "OnConnect"
 		mqtt.OnConnect = func(client *gomqtt_mini_client.MqttClient) {
 			for _, subs := range config.Settings.Mqtt.Subscribers {
 				client.Subscribe(subs.Topic)
@@ -339,6 +346,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	if len(config.Settings.Mqtt.Publishers) > 0 {
 		channel_pub := make(map[string]mqtt_mapping)
 
+		// We parse the mapping between NoCAN channels and MQTT topics
+
 		for _, pubs := range config.Settings.Mqtt.Publishers {
 
 			if len(pubs.Transform) == 0 {
@@ -352,7 +361,10 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			clog.Debug("Mapping NoCAN channel '%s' to MQTT topic '%s' for publication", pubs.Channel, pubs.Topic)
 		}
 
+		// We run a loop that listens to NoCAN channel updates and then propagates them to MQTT topics
 		go func() {
+			defer mqtt.Disconnect()
+
 			for {
 				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
 
