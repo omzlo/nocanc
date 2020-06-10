@@ -29,6 +29,7 @@ import (
 var (
 	NOCANC_VERSION string = "Undefined"
 	dummy          string
+    forceFlag      bool = false
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -69,7 +70,8 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 func WebuiFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
-	return fs
+    fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
+    return fs
 }
 
 func DownloadFlagSet(cmd string) *flag.FlagSet {
@@ -90,6 +92,13 @@ func ReadChannelFlagSet(cmd string) *flag.FlagSet {
 	fs.BoolVar(&config.Settings.OnUpdate, "on-update", false, "Wait until channel is updated instead of returning last value immediately")
 	return fs
 }
+
+func RebootFlagSet(cmd string) *flag.FlagSet {
+    fs := BaseFlagSet(cmd)
+    fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
+    return fs
+}
+
 
 /***/
 
@@ -295,6 +304,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	if len(config.Settings.Mqtt.Subscribers) > 0 {
 		channel_sub := make(map[string]mqtt_mapping)
 
+		// We parse and setup the mapping bewteen MQTT topics and NoCAN channels
+
 		for _, subs := range config.Settings.Mqtt.Subscribers {
 
 			if len(subs.Transform) == 0 {
@@ -307,6 +318,9 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			channel_sub[subs.Topic] = mqtt_mapping{subs.Channel, template}
 			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
 		}
+
+		// SubscribeCallback is the function that gets alled when data is published on a MQTT channel
+		// we transfer the data to a NoCAN channel, using channel_sub as a mapping.
 
 		mqtt.SubscribeCallback = func(topic string, value []byte) {
 			tv := struct {
@@ -329,6 +343,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			}
 		}
 
+		// We make sure our MQTT client is subscribed to the relevant topics
+		// We only do this once connected, hence the "OnConnect"
 		mqtt.OnConnect = func(client *gomqtt_mini_client.MqttClient) {
 			for _, subs := range config.Settings.Mqtt.Subscribers {
 				client.Subscribe(subs.Topic)
@@ -344,6 +360,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	if len(config.Settings.Mqtt.Publishers) > 0 {
 		channel_pub := make(map[string]mqtt_mapping)
 
+		// We parse the mapping between NoCAN channels and MQTT topics
+
 		for _, pubs := range config.Settings.Mqtt.Publishers {
 
 			if len(pubs.Transform) == 0 {
@@ -357,7 +375,10 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			clog.Debug("Mapping NoCAN channel '%s' to MQTT topic '%s' for publication", pubs.Channel, pubs.Topic)
 		}
 
+		// We run a loop that listens to NoCAN channel updates and then propagates them to MQTT topics
 		go func() {
+			defer mqtt.Disconnect()
+
 			for {
 				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
 
@@ -432,7 +453,7 @@ func list_nodes_cmd(fs *flag.FlagSet) error {
 	nl, err := client.ListNodes()
 
 	if err != nil {
-		return err.GoError()
+		return err
 	}
 	clog.Debug("Listing %d nodes.", len(nl.Nodes))
 	fmt.Println(nl)
@@ -482,7 +503,7 @@ func device_info_cmd(fs *flag.FlagSet) error {
 	di, err := client.GetDeviceInformation()
 
 	if err != nil {
-		return err.GoError()
+		return err
 	}
 	clog.Debug("Fetching device information.")
 	fmt.Println(di)
@@ -716,8 +737,24 @@ func download_cmd(fs *flag.FlagSet) error {
 }
 
 func reboot_cmd(fs *flag.FlagSet) error {
-	panic("Unimplemented")
-	return nil
+    xargs := fs.Args()
+    if len(xargs) != 1 {
+        return fmt.Errorf("Expected one parameter: a numerical node identifier.")
+    }
+
+    nodeid, err := strconv.Atoi(xargs[0])
+
+    if err != nil {
+        return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
+    }
+
+    // Carefull to use xerr and not err
+    xerr := client.RebootNode(nodeid, forceFlag)
+    if xerr != nil {
+        return xerr
+    }
+    fmt.Println("OK")
+    return nil
 }
 
 func power_cmd(fs *flag.FlagSet) error {
@@ -804,7 +841,7 @@ func webui_cmd(fs *flag.FlagSet) error {
 		go client.UpdateLatestNews("webui", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
 	}
 	client.StartDefaultJobManager()
-	return webui.Run(config.Settings.Webui.WebServer)
+	return webui.Run(config.Settings.Webui.WebServer, config.Settings.Webui.Refresh)
 }
 
 func help_cmd(fs *flag.FlagSet) error {
@@ -848,7 +885,7 @@ var Commands = helpers.CommandFlagSetList{
 	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
 	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
 	{"read-channel", read_channel_cmd, ReadChannelFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
-	{"reboot", reboot_cmd, BaseFlagSet, "reboot [options] <node_id>", "Reboot node"},
+	{"reboot", reboot_cmd, RebootFlagSet, "reboot [options] <node_id>", "Reboot node"},
 	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
 	{"webui", webui_cmd, WebuiFlagSet, "webui", "Run web interface"},

@@ -145,6 +145,6 @@ func Run(addr string, refresh_rate uint) error {
 	mux.Handle("GET /static/*", SimpleHandler(http.StripPrefix("/static", http.FileServer(static_files))))
 	mux.HandleFunc("GET /*", default_handler)
 
-	clog.Info("Connect to the Webui at %s", addr)
+	clog.Info("Connect to the Webui at %s (refresh=%d)", addr, refresh)
 	return http.ListenAndServe(addr, mux)
 }

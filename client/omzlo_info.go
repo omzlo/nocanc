@@ -32,7 +32,7 @@ func UpdateLatestNews(client_type string, version string, os string, arch string
 		if cerr == nil {
 			chip_id = base64.StdEncoding.EncodeToString(di.ChipId[:])
 		} else {
-			clog.Warning("Could not get device information: %s.", cerr.Error)
+			clog.Warning("Could not get device information: %s.", cerr.Error())
 			chip_id = "undefined"
 		}
 
@@ -45,7 +45,7 @@ func UpdateLatestNews(client_type string, version string, os string, arch string
 			client_type,
 			time.Since(start)/time.Second)
 
-		clog.Info("Query to %s\n", url)
+		clog.Info("Query to %s", url)
 
 		r, err := http_client.Get(url)
 		if err != nil {
