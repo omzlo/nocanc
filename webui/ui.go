@@ -14,6 +14,7 @@ import (
 const API_PREFIX string = "/api/v1"
 
 var (
+    refresh        uint
 	mux            *ServeMux = nil
 	static_files   *packr.Box
 	template_files *packr.Box
@@ -95,9 +96,11 @@ func (handler *TemplateHandler) ServeHTTP(w http.ResponseWriter, req *http.Reque
 		&struct {
 			Breadcrumbs []*Link
 			Params      map[string]string
+            Refresh     uint
 		}{
 			links,
 			params.Value,
+            refresh,
 		})
 
 	if err != nil {
@@ -106,7 +109,7 @@ func (handler *TemplateHandler) ServeHTTP(w http.ResponseWriter, req *http.Reque
 	}
 }
 
-func Run(addr string) error {
+func Run(addr string, refresh_rate uint) error {
 	if mux != nil {
 		return fmt.Errorf("Webui is already running")
 	}
@@ -119,6 +122,8 @@ func Run(addr string) error {
 	if err != nil {
 		panic(err)
 	}
+
+    refresh = refresh_rate
 
 	mux.HandleFunc("GET /api/v1/nodes", nodes_index)
 	mux.HandleFunc("GET /api/v1/nodes/:id", nodes_show)

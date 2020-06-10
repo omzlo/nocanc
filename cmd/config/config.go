@@ -167,6 +167,7 @@ type MqttConfiguration struct {
 
 type WebuiConfiguration struct {
 	WebServer string `toml:"web-server"`
+    Refresh uint `toml:"refresh"`
 }
 
 type Configuration struct {
@@ -198,6 +199,7 @@ var DefaultSettings = Configuration{
 	},
 	Webui: WebuiConfiguration{
 		WebServer: "localhost:8080",
+        Refresh:   5000,
 	},
 	CheckForUpdates: true,
 	UpdateUrl:       "https://www.omzlo.com/software_update",

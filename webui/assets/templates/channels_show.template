@@ -76,7 +76,7 @@ function submit_handler(event) {
 
 $(document).ready(function() {
     update_page()
-    setInterval(update_page, 5000); 
+    setInterval(update_page, {{ .Params }}); 
     $("#channel_value_update").submit(submit_handler);
 });
 </script>

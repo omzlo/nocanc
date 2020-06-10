@@ -130,7 +130,7 @@ function update_info() {
 $(document).ready(function() {
     update_page()
     update_info()
-    setInterval(update_page, 5000); 
+    setInterval(update_page, {{ .Refresh }} ); 
 });
 </script>
 
