@@ -7,11 +7,11 @@ import (
 	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
 	"github.com/omzlo/gomqtt-mini-client"
-	"github.com/omzlo/nocanc/client"
 	"github.com/omzlo/nocanc/cmd/config"
+	"github.com/omzlo/nocanc/helper"
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocanc/webui"
-	"github.com/omzlo/nocand/models/device"
+	//"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/helpers"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
@@ -29,7 +29,7 @@ import (
 var (
 	NOCANC_VERSION string = "Undefined"
 	dummy          string
-    forceFlag      bool = false
+	forceFlag      bool = false
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -70,8 +70,8 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 func WebuiFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
-    fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
-    return fs
+	fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
+	return fs
 }
 
 func DownloadFlagSet(cmd string) *flag.FlagSet {
@@ -94,29 +94,20 @@ func ReadChannelFlagSet(cmd string) *flag.FlagSet {
 }
 
 func RebootFlagSet(cmd string) *flag.FlagSet {
-    fs := BaseFlagSet(cmd)
-    fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
-    return fs
+	fs := BaseFlagSet(cmd)
+	fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
+	return fs
 }
-
 
 /***/
 
-func DialNocanServer() (*socket.EventConn, error) {
-	clog.Debug("Trying to connect to NoCAN event server '%s'", config.Settings.EventServer)
-
-	conn, err := socket.Dial(config.Settings.EventServer, config.Settings.AuthToken)
-	if err != nil {
-		clog.Warning("Failed to connect to '%s', %s", config.Settings.EventServer, err)
-		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
-	}
-	clog.Debug("Connected to NoCAN event server '%s'", config.Settings.EventServer)
-	return conn, nil
-}
-
 func monitor_cmd(fs *flag.FlagSet) error {
+	nocan_client := helper.NewNocanClient()
 
-	sl := socket.NewSubscriptionList()
+	callback := func(conn *socket.EventConn, event socket.Eventer) error {
+		fmt.Println(event)
+		return nil
+	}
 
 	if len(fs.Args()) > 0 {
 		for _, arg := range fs.Args() {
@@ -124,47 +115,14 @@ func monitor_cmd(fs *flag.FlagSet) error {
 			if err != nil {
 				return err
 			}
-			sl.Add(socket.EventId(i))
+			nocan_client.OnEvent(socket.EventId(i), callback)
 		}
 	} else {
-		for i := 1; i < socket.EventCount; i++ {
-			sl.Add(socket.EventId(i))
+		for i := socket.EventId(1); i < socket.EventIdCount; i++ {
+			nocan_client.OnEvent(i, callback)
 		}
 	}
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-	defer conn.Close()
-	for {
-		eid, value, err := conn.Get()
-		if err != nil {
-			return err
-		}
-		switch eid {
-		case socket.BusPowerStatusUpdateEvent:
-			var ps device.PowerStatus
-			if err := ps.UnpackValue(value); err != nil {
-				clog.Warning("Could not unpack event: %s", err)
-			} else {
-				fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, ps)
-			}
-		case socket.ChannelUpdateEvent:
-			var cu socket.ChannelUpdate
-			if err := cu.UnpackValue(value); err != nil {
-				clog.Warning("Could not unpack event: %s", err)
-			} else {
-				fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, cu)
-			}
-
-		default:
-			fmt.Printf("EVENT\t%s\t#%d\t%s\n", eid, eid, value)
-		}
-	}
-	return nil
+	return nocan_client.DispatchEvents()
 }
 
 func publish_cmd(fs *flag.FlagSet) error {
@@ -177,34 +135,30 @@ func publish_cmd(fs *flag.FlagSet) error {
 	channelName := args[0]
 	channelValue := args[1]
 
-	conn, err := DialNocanServer()
-	if err != nil {
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
+
+	if err := nocan_client.Connect(); err != nil {
 		return err
 	}
-	defer conn.Close()
-
-	return conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(channelName, 0xFFFF, socket.CHANNEL_UPDATED, []byte(channelValue)))
+	return nocan_client.Send(socket.NewChannelUpdateEvent(channelName, 0xFFFF, socket.CHANNEL_UPDATED, []byte(channelValue)))
 }
 
 func blynk_cmd(fs *flag.FlagSet) error {
 	var channel_to_pin map[string]uint
 	var channel_notify map[string]bool
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	nocan_client := helper.NewNocanClient()
 
-	client := blynk.NewClient(config.Settings.Blynk.BlynkServer, config.Settings.Blynk.BlynkToken)
+	blynk_client := blynk.NewClient(config.Settings.Blynk.BlynkServer, config.Settings.Blynk.BlynkToken)
 
 	clog.Info("There are %d blynk writers.", len(config.Settings.Blynk.Writers))
 	for _, it_writer := range config.Settings.Blynk.Writers {
 		writer := it_writer
-		client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
+		blynk_client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
-				conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val)))
+				nocan_client.Send(socket.NewChannelUpdateEvent(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val)))
 			}
 		})
 	}
@@ -214,56 +168,37 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		channel_to_pin = make(map[string]uint)
 		channel_notify = make(map[string]bool)
 
-		sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
-		if err = conn.Subscribe(sl); err != nil {
-			return err
-		}
-
 		for _, channel := range config.Settings.Blynk.Notifiers {
 			channel_notify[channel] = true
 		}
 
-		client.OnConnect(func(c uint) error {
-			if c == 1 {
-				for _, reader := range config.Settings.Blynk.Readers {
-					channel_to_pin[reader.Channel] = reader.Pin
-
-					if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(reader.Channel, 0xFFFF)); err != nil {
-						return err
-					}
+		nocan_client.OnConnect(func(conn *socket.EventConn) error {
+			for _, reader := range config.Settings.Blynk.Readers {
+				channel_to_pin[reader.Channel] = reader.Pin
+				if err := conn.Send(socket.NewChannelUpdateRequestEvent(reader.Channel, 0xFFFF)); err != nil {
+					return err
 				}
-
 			}
 			return nil
 		})
 
-		go func() {
-			for {
-				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
+		nocan_client.OnEvent(socket.ChannelUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+			cu := e.(*socket.ChannelUpdateEvent)
 
-				if err != nil {
-					return
-				}
-
-				cu := new(socket.ChannelUpdate)
-
-				if err = cu.UnpackValue(value); err != nil {
-					return
-				}
-
-				if ok := channel_notify[cu.Name]; ok {
-					client.Notify(fmt.Sprintf("%s: %s", cu.Name, cu.Value))
-				}
-
-				vpin, ok := channel_to_pin[cu.Name]
-				if ok {
-					client.VirtualWrite(vpin, string(cu.Value))
-				}
+			if ok := channel_notify[cu.ChannelName]; ok {
+				blynk_client.Notify(fmt.Sprintf("%s: %s", cu.ChannelName, cu.Value))
 			}
-		}()
 
+			vpin, ok := channel_to_pin[cu.ChannelName]
+			if ok {
+				blynk_client.VirtualWrite(vpin, string(cu.Value))
+			}
+			return nil
+		})
 	}
-	return client.RunEventLoop()
+
+	go nocan_client.DispatchEvents()
+	return blynk_client.RunEventLoop()
 }
 
 type mqtt_mapping struct {
@@ -277,16 +212,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	/* Setup NoCAN connection */
 	/**************************/
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
-	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
 	/*************************/
 	/* Setup MQTT connection */
@@ -319,7 +246,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
 		}
 
-		// SubscribeCallback is the function that gets alled when data is published on a MQTT channel
+		// SubscribeCallback is the function that gets called when data is published on a MQTT channel
 		// we transfer the data to a NoCAN channel, using channel_sub as a mapping.
 
 		mqtt.SubscribeCallback = func(topic string, value []byte) {
@@ -335,8 +262,9 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 				if err = mapping.Transform.Execute(svalue, tv); err != nil {
 					clog.Warning("Failed to transform value of topic '%s' for MQTT subscription, %s", tv.Topic)
 				} else {
-					conn.Put(socket.ChannelUpdateEvent, socket.NewChannelUpdate(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes()))
-					clog.Debug("Dispatched %d byte message for NoCAN channel '%s': %q", svalue.Len(), mapping.Target, svalue.Bytes())
+					if err := nocan_client.Send(socket.NewChannelUpdateEvent(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes())); err != nil {
+						clog.Warning("Failed to send %d byte message for NoCAN channel '%s': %s", svalue.Len(), mapping.Target, err)
+					}
 				}
 			} else {
 				clog.Warning("Received message for MQTT topic '%s', but this topic is not mapped to any NoCAN channel", topic)
@@ -376,138 +304,137 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 		}
 
 		// We run a loop that listens to NoCAN channel updates and then propagates them to MQTT topics
-		go func() {
-			defer mqtt.Disconnect()
+		nocan_client.OnEvent(socket.ChannelUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+			if !mqtt.Connected() {
+				return nil
+			}
+			cu := e.(*socket.ChannelUpdateEvent)
 
-			for {
-				value, err := conn.WaitFor(socket.ChannelUpdateEvent)
-
-				if err != nil {
-					clog.Error(err.Error())
-					return
-				}
-
-				if mqtt.Connected() {
-					cu := new(socket.ChannelUpdate)
-
-					if err = cu.UnpackValue(value); err != nil {
-						clog.Error(err.Error())
-						return
-					}
-
-					if mapping, ok := channel_pub[cu.Name]; ok {
-						value := new(bytes.Buffer)
-						if err = mapping.Transform.Execute(value, cu); err != nil {
-							clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.Name)
-						} else {
-							if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
-								clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.Name, mapping.Target, err)
-							} else {
-								clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.Name, mapping.Target)
-								clog.Debug("Published value is %q", value.Bytes())
-							}
-						}
+			if mapping, ok := channel_pub[cu.ChannelName]; ok {
+				value := new(bytes.Buffer)
+				if err = mapping.Transform.Execute(value, cu); err != nil {
+					clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.ChannelName)
+				} else {
+					if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
+						clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.ChannelName, mapping.Target, err)
+					} else {
+						clog.Info("Published %d bytes from channel '%s' to topic '%s'", len(cu.Value), cu.ChannelName, mapping.Target)
+						clog.Debug("Published value is %q", value.Bytes())
 					}
 				}
 			}
-		}()
+			return nil
+		})
 	}
-
+	go nocan_client.DispatchEvents()
 	return mqtt.RunEventLoop()
 }
 
 func list_channels_cmd(fs *flag.FlagSet) error {
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	nocan_client.OnEvent(socket.ChannelListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		cl := e.(*socket.ChannelListEvent)
+		clog.Debug("Listing %d channels.", len(cl.Channels))
+		fmt.Println(cl)
+		return socket.Terminate
+	})
 
-	sl := socket.NewSubscriptionList(socket.ChannelListEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-	if err = conn.Put(socket.ChannelListRequestEvent, nil); err != nil {
-		return err
-	}
-
-	value, err := conn.WaitFor(socket.ChannelListEvent)
-
-	if err != nil {
-		return err
-	}
-
-	var cl socket.ChannelList
-
-	if err = cl.UnpackValue(value); err != nil {
-		return err
-	}
-	clog.Debug("Listing %d channels.", len(cl.Channels))
-	fmt.Println(cl)
-	return nil
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewChannelListRequestEvent())
+	})
+	return nocan_client.DispatchEvents()
 }
 
 func list_nodes_cmd(fs *flag.FlagSet) error {
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	nl, err := client.ListNodes()
+	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		nl := e.(*socket.NodeListEvent)
+		clog.Debug("Listing %d nodes.", len(nl.Nodes))
+		fmt.Println(nl)
+		return socket.Terminate
+	})
 
-	if err != nil {
-		return err
-	}
-	clog.Debug("Listing %d nodes.", len(nl.Nodes))
-	fmt.Println(nl)
-	return nil
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewNodeListRequestEvent())
+	})
+	return nocan_client.DispatchEvents()
 }
 
 func arduino_discovery_cmd(fs *flag.FlagSet) error {
 	var input string
 
-	for {
-		var err error
+	sync_mode := false
 
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
+
+	nocan_client.OnEvent(socket.NodeUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		if sync_mode {
+			nu := e.(*socket.NodeUpdateEvent)
+			json, err := helper.GenerateArduinoDiscoveryNodeUpdate(nu)
+			if err != nil {
+				return err
+			}
+			fmt.Println(json)
+		}
+		return nil
+	})
+
+	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		if sync_mode {
+			nl := e.(*socket.NodeListEvent)
+			json, err := helper.GenerateArduinoDiscoveryNodeList(nl)
+			if err != nil {
+				return err
+			}
+			fmt.Println(json)
+		}
+		return nil
+	})
+
+	for {
 		fmt.Scanln(&input)
 
 		switch input {
 		case "START_SYNC":
-			for {
-				err = client.ArduinoDiscoverNodesSync(func(json string) {
-					fmt.Println(json)
-				})
-				if err != nil {
-					fmt.Println(client.ArduinoDiscoverError(err.Error()))
-					time.Sleep(15 * time.Second)
-				}
-			}
+			sync_mode = true
 		case "START":
 			// do nothing
 			continue
 		case "STOP":
+			sync_mode = false
 			return nil
 		case "LIST":
-			json, err := client.ArduinoDiscoverNodes()
-			if err != nil {
-				fmt.Println(client.ArduinoDiscoverError(err.Error()))
-			} else {
-				fmt.Println(json)
+			sync_mode = false
+			if err := nocan_client.Send(socket.NewNodeListRequestEvent()); err != nil {
+				return err
 			}
 		default:
-			fmt.Println(client.ArduinoDiscoverError(input + " not supported"))
+			fmt.Println(helper.ArduinoDiscoverError(input + " not supported"))
 		}
 	}
-	return nil
+	return nocan_client.DispatchEvents()
 }
 
 func device_info_cmd(fs *flag.FlagSet) error {
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	di, err := client.GetDeviceInformation()
+	nocan_client.OnEvent(socket.DeviceInformationEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		di := e.(*socket.DeviceInformationEvent)
+		fmt.Println(di)
+		return socket.Terminate
+	})
 
-	if err != nil {
-		return err
-	}
-	clog.Debug("Fetching device information.")
-	fmt.Println(di)
-	return nil
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		clog.Debug("Fetching device information.")
+		return conn.Send(socket.NewDeviceInformationRequestEvent())
+	})
+	return nocan_client.DispatchEvents()
 }
 
 func read_channel_cmd(fs *flag.FlagSet) error {
@@ -518,41 +445,22 @@ func read_channel_cmd(fs *flag.FlagSet) error {
 	}
 	channelName := args[0]
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	sl := socket.NewSubscriptionList(socket.ChannelUpdateEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-
-	if !config.Settings.OnUpdate {
-		if err = conn.Put(socket.ChannelUpdateRequestEvent, socket.NewChannelUpdateRequest(channelName, 0xFFFF)); err != nil {
-			return err
-		}
-	}
-
-	for {
-		value, err := conn.WaitFor(socket.ChannelUpdateEvent)
-
-		if err != nil {
-			return err
-		}
-
-		var cu socket.ChannelUpdate
-		if err = cu.UnpackValue(value); err != nil {
-			return err
-		}
-		if cu.Name == channelName {
+	nocan_client.OnEvent(socket.ChannelUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		cu := e.(*socket.ChannelUpdateEvent)
+		if cu.ChannelName == channelName {
 			fmt.Println(cu)
-			break
+			return socket.Terminate
 		}
-		clog.Debug("Channel update ignored: <%s>", cu)
-	}
-	return nil
+		return nil
+	})
+
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewChannelUpdateRequestEvent(channelName, 0xFFFF))
+	})
+	return nocan_client.DispatchEvents()
 }
 
 func upload_cmd(fs *flag.FlagSet) error {
@@ -581,7 +489,7 @@ func upload_cmd(fs *flag.FlagSet) error {
 		return err
 	}
 
-	upload_request := socket.NewNodeFirmware(nocan.NodeId(nodeid), false)
+	upload_request := socket.NewNodeFirmwareEvent(nocan.NodeId(nodeid)).ConfigureAsUpload()
 	for _, block := range ihex.Blocks {
 		if block.Type == intelhex.DataRecord {
 			upload_request.AppendBlock(block.Address, block.Data)
@@ -590,57 +498,34 @@ func upload_cmd(fs *flag.FlagSet) error {
 		}
 	}
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	sl := socket.NewSubscriptionList(socket.NodeFirmwareDownloadEvent, socket.NodeFirmwareProgressEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-
-	if err = conn.Put(socket.NodeFirmwareUploadEvent, upload_request); err != nil {
-		return err
-	}
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(upload_request)
+	})
 
 	start := time.Now()
-	for {
-		eid, data, err := conn.Get()
-
-		if err != nil {
-			return err
-		}
-
-		switch eid {
-		case socket.NodeFirmwareProgressEvent:
-			var np socket.NodeFirmwareProgress
-
-			if err := np.UnpackValue(data); err != nil {
-				return err
-			}
-
-			switch np.Progress {
-			case socket.ProgressSuccess:
-				fmt.Printf("\nDone\n")
-				return nil
-			case socket.ProgressFailed:
-				fmt.Printf("\nFailed\n")
-				return fmt.Errorf("Upload failed")
-			default:
-				dur := uint32(time.Since(start).Seconds())
-				if dur == 0 {
-					dur = 1
-				}
-				fmt.Printf("\rProgress: %d%%, %d bytes, %d bps.", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
-			}
-
+	nocan_client.OnEvent(socket.NodeFirmwareProgressEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		np := e.(*socket.NodeFirmwareProgressEvent)
+		switch np.Progress {
+		case socket.ProgressSuccess:
+			fmt.Printf("\nDone\n")
+			return socket.Terminate
+		case socket.ProgressFailed:
+			fmt.Printf("\nFailed\n")
+			return fmt.Errorf("Upload failed")
 		default:
-			return fmt.Errorf("\nUnexpected event (eid=%d)", eid)
+			dur := uint32(time.Since(start).Seconds())
+			if dur == 0 {
+				dur = 1
+			}
+			fmt.Printf("\rProgress: %d%%, %d bytes, %d bps.", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
 		}
+		return nil
+	})
 
-	}
-	return nil
+	return nocan_client.DispatchEvents()
 }
 
 func download_cmd(fs *flag.FlagSet) error {
@@ -664,97 +549,80 @@ func download_cmd(fs *flag.FlagSet) error {
 	}
 	defer file.Close()
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	sl := socket.NewSubscriptionList(socket.NodeFirmwareDownloadEvent, socket.NodeFirmwareProgressEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-
-	download_request := socket.NewNodeFirmware(nocan.NodeId(nodeid), true)
+	download_request := socket.NewNodeFirmwareEvent(nocan.NodeId(nodeid)).ConfigureAsDownload()
 	download_request.Limit = uint32(config.Settings.DownloadSizeLimit)
 
-	if err = conn.Put(socket.NodeFirmwareDownloadRequestEvent, download_request); err != nil {
-		return err
-	}
-
-	start := time.Now()
-	for {
-		eid, data, err := conn.Get()
-
-		if err != nil {
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		if err := conn.Send(download_request); err != nil {
 			return err
 		}
+		return nil
+	})
 
-		switch eid {
-		case socket.NodeFirmwareProgressEvent:
-			var np socket.NodeFirmwareProgress
+	start := time.Now()
 
-			if err := np.UnpackValue(data); err != nil {
-				return err
-			}
+	nocan_client.OnEvent(socket.NodeFirmwareProgressEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		np := e.(*socket.NodeFirmwareProgressEvent)
 
-			switch np.Progress {
-			case socket.ProgressSuccess:
-				fmt.Printf("\nDownload succeeded\n")
-			case socket.ProgressFailed:
-				fmt.Printf("\nDownload failed\n")
-				return fmt.Errorf("Download failed")
-			default:
-				dur := uint32(time.Since(start).Seconds())
-				if dur == 0 {
-					dur = 1
-				}
-				fmt.Printf("\rProgress: %d%%, %d bytes, %d bps", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
-			}
-
-		case socket.NodeFirmwareDownloadEvent:
-			var nf socket.NodeFirmware
-			if err := nf.UnpackValue(data); err != nil {
-				return err
-			}
-
-			if nf.Id == nocan.NodeId(nodeid) {
-				ihex := intelhex.New()
-				for _, block := range nf.Code {
-					fmt.Printf("Saving block of %d bytes, with offset 0x%x\n", len(block.Data), block.Offset)
-					ihex.Add(intelhex.DataRecord, block.Offset, block.Data)
-				}
-				if err := ihex.Save(file); err != nil {
-					return err
-				}
-				return nil
-			}
+		switch np.Progress {
+		case socket.ProgressSuccess:
+			fmt.Printf("\nDownload succeeded\n")
+			return nil
+		case socket.ProgressFailed:
+			fmt.Printf("\nDownload failed\n")
+			return fmt.Errorf("Download failed")
 		default:
-			return fmt.Errorf("Unexpected event (eid=%d)", eid)
+			dur := uint32(time.Since(start).Seconds())
+			if dur == 0 {
+				dur = 1
+			}
+			fmt.Printf("\rProgress: %d%%, %d bytes, %d bps", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
 		}
+		return nil
+	})
 
-	}
-	return nil
+	nocan_client.OnEvent(socket.NodeFirmwareEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		nf := e.(*socket.NodeFirmwareEvent)
+
+		if nf.NodeId == nocan.NodeId(nodeid) {
+			ihex := intelhex.New()
+			for _, block := range nf.Code {
+				fmt.Printf("Saving block of %d bytes, with offset 0x%x\n", len(block.Data), block.Offset)
+				ihex.Add(intelhex.DataRecord, block.Offset, block.Data)
+			}
+			if err := ihex.Save(file); err != nil {
+				return err
+			}
+			return socket.Terminate
+		}
+		return fmt.Errorf("Unexpected firmware event for node %d", nf.NodeId)
+	})
+	return nocan_client.DispatchEvents()
 }
 
 func reboot_cmd(fs *flag.FlagSet) error {
-    xargs := fs.Args()
-    if len(xargs) != 1 {
-        return fmt.Errorf("Expected one parameter: a numerical node identifier.")
-    }
+	xargs := fs.Args()
+	if len(xargs) != 1 {
+		return fmt.Errorf("Expected one parameter: a numerical node identifier.")
+	}
 
-    nodeid, err := strconv.Atoi(xargs[0])
+	nodeid, err := strconv.Atoi(xargs[0])
 
-    if err != nil {
-        return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
-    }
+	if err != nil {
+		return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
+	}
 
-    // Carefull to use xerr and not err
-    xerr := client.RebootNode(nodeid, forceFlag)
-    if xerr != nil {
-        return xerr
-    }
-    fmt.Println("OK")
-    return nil
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
+
+	if err := nocan_client.Connect(); err != nil {
+		return err
+	}
+
+	return nocan_client.Send(socket.NewNodeRebootRequestEvent(nocan.NodeId(nodeid), forceFlag))
 }
 
 func power_cmd(fs *flag.FlagSet) error {
@@ -775,36 +643,14 @@ func power_cmd(fs *flag.FlagSet) error {
 		return fmt.Errorf("Parameter can only have one of the following values: 'on', 'off', '1' or '0'.")
 	}
 
-	conn, err := DialNocanServer()
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	nocan_client := helper.NewNocanClient()
+	defer nocan_client.Close()
 
-	sl := socket.NewSubscriptionList(socket.BusPowerEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return err
-	}
-	if err = conn.Put(socket.BusPowerEvent, socket.BusPower(expect)); err != nil {
+	if err := nocan_client.Connect(); err != nil {
 		return err
 	}
 
-	value, err := conn.WaitFor(socket.BusPowerEvent)
-
-	if err != nil {
-		return err
-	}
-
-	var power socket.BusPower
-	if err = power.UnpackValue(value); err != nil {
-		return err
-	}
-
-	if bool(power) == expect {
-		fmt.Printf("# Bus power set to: %s\r\n", xargs[0])
-		return nil
-	}
-	return fmt.Errorf("Failed to set bus power to %s", xargs[0])
+	return nocan_client.Send(socket.NewBusPowerEvent(expect))
 }
 
 func version_cmd(fs *flag.FlagSet) error {
@@ -838,9 +684,9 @@ func version_cmd(fs *flag.FlagSet) error {
 
 func webui_cmd(fs *flag.FlagSet) error {
 	if config.Settings.CheckForUpdates {
-		go client.UpdateLatestNews("webui", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH)
+		go helper.UpdateLatestNews("webui", NOCANC_VERSION, runtime.GOOS, runtime.GOARCH, &webui.DeviceInfo)
 	}
-	client.StartDefaultJobManager()
+	helper.StartDefaultJobManager()
 	return webui.Run(config.Settings.Webui.WebServer, config.Settings.Webui.Refresh)
 }
 

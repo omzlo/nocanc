@@ -1,4 +1,4 @@
-package client
+package helper
 
 import (
 	"encoding/base64"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/omzlo/clog"
 	"github.com/omzlo/nocanc/cmd/config"
-	//"github.com/omzlo/nocand/models/device"
+	"github.com/omzlo/nocand/socket"
 	"net/http"
 	"time"
 )
@@ -21,20 +21,20 @@ var LatestNews OmzloNews
 
 var http_client = &http.Client{Timeout: 10 * time.Second}
 
-func UpdateLatestNews(client_type string, version string, os string, arch string) {
+func UpdateLatestNews(client_type string, version string, os string, arch string, deviceInfo **socket.DeviceInformationEvent) {
 	var chip_id string
+
+	for {
+		if *deviceInfo != nil {
+			chip_id = base64.StdEncoding.EncodeToString((*deviceInfo).Information.ChipId[:])
+			break
+		}
+		time.Sleep(10 * time.Second)
+	}
 
 	start := time.Now()
 	for {
 		LatestNews.Loaded = false
-
-		di, cerr := GetDeviceInformation()
-		if cerr == nil {
-			chip_id = base64.StdEncoding.EncodeToString(di.ChipId[:])
-		} else {
-			clog.Warning("Could not get device information: %s.", cerr.Error())
-			chip_id = "undefined"
-		}
 
 		url := fmt.Sprintf("%s?i=%s&cv=%s&o=%s&a=%s&c=%s&u=%d&t=nocanc",
 			config.Settings.UpdateUrl,

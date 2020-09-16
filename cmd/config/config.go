@@ -6,7 +6,6 @@ import (
 	"github.com/omzlo/clog"
 	"github.com/omzlo/goblynk"
 	"github.com/omzlo/nocand/models/helpers"
-	"github.com/omzlo/nocand/socket"
 	"strconv"
 	"strings"
 )
@@ -167,7 +166,7 @@ type MqttConfiguration struct {
 
 type WebuiConfiguration struct {
 	WebServer string `toml:"web-server"`
-    Refresh uint `toml:"refresh"`
+	Refresh   uint   `toml:"refresh"`
 }
 
 type Configuration struct {
@@ -199,7 +198,7 @@ var DefaultSettings = Configuration{
 	},
 	Webui: WebuiConfiguration{
 		WebServer: "localhost:8080",
-        Refresh:   5000,
+		Refresh:   5000,
 	},
 	CheckForUpdates: true,
 	UpdateUrl:       "https://www.omzlo.com/software_update",
@@ -232,18 +231,4 @@ func LoadFile(fname string) (bool, error) {
 
 func LoadDefault() (bool, error) {
 	return loadFile(DefaultConfigFile)
-}
-
-/***/
-
-func DialNocanServer() (*socket.EventConn, error) {
-	clog.DebugXX("Trying to connect to NoCAN event server '%s'", Settings.EventServer)
-
-	conn, err := socket.Dial(Settings.EventServer, Settings.AuthToken)
-	if err != nil {
-		clog.Warning("Failed to connect to '%s', %s", Settings.EventServer, err)
-		return nil, fmt.Errorf("Failed to connect to NoCAN server, %s", err)
-	}
-	clog.DebugX("Connected to NoCAN event server '%s'", Settings.EventServer)
-	return conn, nil
 }

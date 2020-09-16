@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/omzlo/clog"
-	"github.com/omzlo/nocanc/client"
+	"github.com/omzlo/nocanc/helper"
 	"net/http"
 	"path"
 	"strings"
@@ -36,7 +36,7 @@ func JsonSend(w http.ResponseWriter, req *http.Request, content interface{}) {
 	JsonSendWithStatus(w, req, content, 200)
 }
 
-func ErrorSend(w http.ResponseWriter, req *http.Request, e *client.ExtendedError) {
+func ErrorSend(w http.ResponseWriter, req *http.Request, e *helper.ExtendedError) {
 	clog.Warning("Request to %s returns %d %s: %s", req.URL.Path, e.Status, e.ErrorMessage, e.Information)
 	JsonSendWithStatus(w, req, e, e.Status)
 }
@@ -193,7 +193,7 @@ func (l *LogResponseWriter) WriteHeader(statusCode int) {
 func (mux *ServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	handler, _, params := mux.Handler(r)
 	if handler == nil {
-		ErrorSend(w, r, client.NotFound("No handler"))
+		ErrorSend(w, r, helper.NotFound("No handler"))
 		return
 	}
 	logger := NewLogResponseWriter(w)

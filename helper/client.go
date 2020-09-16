@@ -1,16 +1,21 @@
-package client
+package helper
 
 import (
 	"fmt"
 	"github.com/omzlo/clog"
 	"github.com/omzlo/nocanc/cmd/config"
 	"github.com/omzlo/nocanc/intelhex"
-	"github.com/omzlo/nocand/models"
-	"github.com/omzlo/nocand/models/device"
+	//"github.com/omzlo/nocand/models"
+	//"github.com/omzlo/nocand/models/device"
 	"github.com/omzlo/nocand/models/nocan"
-	"github.com/omzlo/nocand/models/properties"
+	//"github.com/omzlo/nocand/models/properties"
 	"github.com/omzlo/nocand/socket"
 )
+
+func NewNocanClient() *socket.EventConn {
+	clog.Debug("Preparing to connect to NoCAN event server '%s'", config.Settings.EventServer)
+	return socket.NewEventConn(config.Settings.EventServer, "nocanc", config.Settings.AuthToken)
+}
 
 var DefaultJobManager *JobManager = nil
 
@@ -20,92 +25,78 @@ func StartDefaultJobManager() {
 	}
 }
 
-func ListNodes() (*socket.NodeList, *ExtendedError) {
+/*
+func ListNodes() (*socket.NodeListEvent, *ExtendedError) {
+	list_nodes := make(chan *socket.NodeListEvent)
 
-	conn, err := config.DialNocanServer()
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-	defer conn.Close()
-	sl := socket.NewSubscriptionList(socket.NodeListEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return nil, ExtendError(err)
-	}
-	if err = conn.Put(socket.NodeListRequestEvent, nil); err != nil {
-		return nil, ExtendError(err)
+	nocan_client := NewNocanClient()
+	defer nocan_client.Close()
+
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewNodeListRequestEvent())
+	})
+
+	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		list_nodes <- e.(*socket.NodeListEvent)
+		return socket.Terminate
+	})
+
+	err := nocan_client.DispatchEvents()
+	if err != nil && err != socket.Terminate {
+		return nil, NewExtendedError(err)
 	}
 
-	value, err := conn.WaitFor(socket.NodeListEvent)
-
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-
-	nl := new(socket.NodeList)
-	if err = nl.UnpackValue(value); err != nil {
-		return nil, InternalServerError(err)
-	}
-	return nl, nil
+	return <-list_nodes, nil
 }
 
-func GetNode(nodeId uint) (*socket.NodeUpdate, *ExtendedError) {
-	conn, err := config.DialNocanServer()
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-	defer conn.Close()
-	sl := socket.NewSubscriptionList(socket.NodeUpdateEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return nil, ExtendError(err)
-	}
-	if err = conn.Put(socket.NodeUpdateRequestEvent, socket.NodeUpdateRequest(nodeId)); err != nil {
-		return nil, ExtendError(err)
+func GetNode(nodeId uint) (*socket.NodeUpdateEvent, *ExtendedError) {
+	node_update := make(chan *socket.NodeUpdateEvent)
+
+	nocan_client := NewNocanClient()
+	defer nocan_client.Close()
+
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewNodeUpdateRequestEvent(nodeId))
+	})
+
+	nocan_client.OnEvent(socket.NodeUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		nu := e.(*NodeUpdateEvent)
+		if nu.NodeId == nodeId {
+			node_update <- nu
+			return socket.Terminate
+		}
+		return nil
+	})
+
+	err := nocan_client.DispatchEvents()
+	if err != nil && err != socket.Terminate {
+		return nil, ExtendedError(err)
 	}
 
-	value, err := conn.WaitFor(socket.NodeUpdateEvent)
-
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-
-	nu := new(socket.NodeUpdate)
-	if err = nu.UnpackValue(value); err != nil {
-		return nil, InternalServerError(err)
-	}
-
-	if nu.State == models.NodeStateUnknown {
-		return nil, NotFound(fmt.Sprintf("Node %d not found", nodeId))
-	}
-	return nu, nil
+	return <-node_update, nil
 }
 
-func ListChannels() (*socket.ChannelList, *ExtendedError) {
-	conn, err := config.DialNocanServer()
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-	defer conn.Close()
+func ListChannels() (*socket.ChannelListEvent, *ExtendedError) {
+	list_channels := make(chan *socket.ChannelListEvent)
 
-	sl := socket.NewSubscriptionList(socket.ChannelListEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return nil, ExtendError(err)
-	}
-	if err = conn.Put(socket.ChannelListRequestEvent, nil); err != nil {
-		return nil, ExtendError(err)
+	nocan_client := NewNocanClient()
+	defer nocan_client.Close()
+
+	nocan_client.OnConnect(func(conn *socket.EventConn) error {
+		return conn.Send(socket.NewChannelListRequestEvent())
+	})
+
+	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		list_nodes <- e.(*socket.NodeListEvent)
+		return socket.Terminate
+	})
+
+	err := nocan_client.DispatchEvents()
+	if err != nil && err != socket.Terminate {
+		return nil, ExtendedError(err)
 	}
 
-	value, err := conn.WaitFor(socket.ChannelListEvent)
-
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-
-	cl := new(socket.ChannelList)
-
-	if err = cl.UnpackValue(value); err != nil {
-		return nil, InternalServerError(err)
-	}
-	return cl, nil
+	return <-list_nodes, nil
 
 }
 
@@ -183,10 +174,10 @@ func GetPowerStatus() (*device.PowerStatus, *ExtendedError) {
 
 	return ps, nil
 }
+*/
+func UploadFirmware(conn *socket.EventConn, nodeId nocan.NodeId, firmware *intelhex.IntelHex, updater JobUpdater) (*Job, *ExtendedError) {
 
-func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater) (*Job, *ExtendedError) {
-
-	upload_request := socket.NewNodeFirmware(nocan.NodeId(nodeId), false)
+	upload_request := socket.NewNodeFirmwareEvent(nodeId).ConfigureAsUpload()
 	for _, block := range firmware.Blocks {
 		if block.Type == intelhex.DataRecord {
 			upload_request.AppendBlock(block.Address, block.Data)
@@ -195,59 +186,29 @@ func UploadFirmware(nodeId uint, firmware *intelhex.IntelHex, updater JobUpdater
 		}
 	}
 
-	conn, err := config.DialNocanServer()
-	if err != nil {
-		return nil, ExtendError(err)
-	}
-
-	sl := socket.NewSubscriptionList(socket.NodeFirmwareDownloadEvent, socket.NodeFirmwareProgressEvent)
-	if err = conn.Subscribe(sl); err != nil {
-		return nil, ExtendError(err)
-	}
-
-	if err = conn.Put(socket.NodeFirmwareUploadEvent, upload_request); err != nil {
-		return nil, ExtendError(err)
+	if err := conn.Send(upload_request); err != nil {
+		return nil, InternalServerError(err)
 	}
 
 	job := DefaultJobManager.NewJob(updater)
-	go func() {
-		for {
-			eid, data, err := conn.Get()
 
-			if err != nil {
-				job.Fail(err)
-				return
-			}
+	conn.OnEvent(socket.NodeFirmwareProgressEventId, func(conn *socket.EventConn, e socket.Eventer) error {
+		np := e.(*socket.NodeFirmwareProgressEvent)
 
-			switch eid {
-			case socket.NodeFirmwareProgressEvent:
-				var np socket.NodeFirmwareProgress
-
-				if err := np.UnpackValue(data); err != nil {
-					job.Fail(err)
-					return
-				}
-
-				switch np.Progress {
-				case socket.ProgressSuccess:
-					job.Success()
-					return
-				case socket.ProgressFailed:
-					job.Fail(fmt.Errorf("Upload failed"))
-					return
-				default:
-					job.UpdateProgress(float32(np.Progress))
-				}
-			default:
-				job.Fail(fmt.Errorf("Unexpected event during firmware upload (eid=%d)", eid))
-				return
-			}
-
+		switch np.Progress {
+		case socket.ProgressSuccess:
+			job.Success()
+		case socket.ProgressFailed:
+			job.Fail(fmt.Errorf("Upload failed"))
+		default:
+			job.UpdateProgress(float32(np.Progress))
 		}
-	}()
+		return nil
+	})
 	return job, nil
 }
 
+/*
 func GetDeviceInformation() (*device.Information, *ExtendedError) {
 	conn, err := config.DialNocanServer()
 	if err != nil {
@@ -326,3 +287,4 @@ func RebootNode(nodeId int, force bool) *ExtendedError {
 	}
 	return nil
 }
+*/

@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"github.com/gobuffalo/packr/v2"
 	"github.com/omzlo/clog"
-	"github.com/omzlo/nocanc/client"
+	"github.com/omzlo/nocanc/helper"
+	"github.com/omzlo/nocand/socket"
 	"html/template"
 	"net/http"
 	"path/filepath"
 	"strings"
 )
 
+var NocanClient *socket.EventConn
+
 const API_PREFIX string = "/api/v1"
 
 var (
-    refresh        uint
+	refresh        uint
 	mux            *ServeMux = nil
 	static_files   *packr.Box
 	template_files *packr.Box
@@ -29,7 +32,7 @@ func default_handler(w http.ResponseWriter, req *http.Request, params *Parameter
 }
 
 func not_found(w http.ResponseWriter, req *http.Request, params *Parameters) {
-	ErrorSend(w, req, client.NotFound("Resource does not exist, check URL"))
+	ErrorSend(w, req, helper.NotFound("Resource does not exist, check URL"))
 }
 
 type TemplateCollectionHandler struct {
@@ -96,15 +99,15 @@ func (handler *TemplateHandler) ServeHTTP(w http.ResponseWriter, req *http.Reque
 		&struct {
 			Breadcrumbs []*Link
 			Params      map[string]string
-            Refresh     uint
+			Refresh     uint
 		}{
 			links,
 			params.Value,
-            refresh,
+			refresh,
 		})
 
 	if err != nil {
-		ErrorSend(w, req, client.InternalServerError(err))
+		ErrorSend(w, req, helper.InternalServerError(err))
 		return
 	}
 }
@@ -113,6 +116,38 @@ func Run(addr string, refresh_rate uint) error {
 	if mux != nil {
 		return fmt.Errorf("Webui is already running")
 	}
+
+	NocanClient := helper.NewNocanClient()
+
+	NocanClient.OnEvent(socket.ChannelListEventId, on_channel_list_event)
+	NocanClient.OnEvent(socket.ChannelUpdateEventId, on_channel_update_event)
+	NocanClient.OnEvent(socket.DeviceInformationEventId, on_device_information_event)
+	NocanClient.OnEvent(socket.NodeListEventId, on_device_information_event)
+	NocanClient.OnEvent(socket.NodeUpdateEventId, on_node_update_event)
+	NocanClient.OnEvent(socket.BusPowerStatusUpdateEventId, on_power_status_update_event)
+	NocanClient.OnEvent(socket.SystemPropertiesEventId, on_system_properties_update_event)
+
+	NocanClient.OnConnect(func(conn *socket.EventConn) error {
+		if err := conn.Send(socket.NewChannelListRequestEvent()); err != nil {
+			return err
+		}
+		if err := conn.Send(socket.NewNodeListRequestEvent()); err != nil {
+			return err
+		}
+		if err := conn.Send(socket.NewDeviceInformationRequestEvent()); err != nil {
+			return err
+		}
+		if err := conn.Send(socket.NewSystemPropertiesRequestEvent()); err != nil {
+			return err
+		}
+		if err := conn.Send(socket.NewBusPowerStatusUpdateRequestEvent()); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	go NocanClient.DispatchEvents()
+
 	mux = NewServeMux()
 
 	static_files = packr.New("static", "./assets/static")
@@ -123,7 +158,7 @@ func Run(addr string, refresh_rate uint) error {
 		panic(err)
 	}
 
-    refresh = refresh_rate
+	refresh = refresh_rate
 
 	mux.HandleFunc("GET /api/v1/nodes", nodes_index)
 	mux.HandleFunc("GET /api/v1/nodes/:id", nodes_show)
