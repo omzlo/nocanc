@@ -122,7 +122,7 @@ func Run(addr string, refresh_rate uint) error {
 	NocanClient.OnEvent(socket.ChannelListEventId, on_channel_list_event)
 	NocanClient.OnEvent(socket.ChannelUpdateEventId, on_channel_update_event)
 	NocanClient.OnEvent(socket.DeviceInformationEventId, on_device_information_event)
-	NocanClient.OnEvent(socket.NodeListEventId, on_device_information_event)
+	NocanClient.OnEvent(socket.NodeListEventId, on_node_list_event)
 	NocanClient.OnEvent(socket.NodeUpdateEventId, on_node_update_event)
 	NocanClient.OnEvent(socket.BusPowerStatusUpdateEventId, on_power_status_update_event)
 	NocanClient.OnEvent(socket.SystemPropertiesEventId, on_system_properties_update_event)
@@ -146,8 +146,13 @@ func Run(addr string, refresh_rate uint) error {
 		return nil
 	})
 
-	go NocanClient.DispatchEvents()
-
+	go func() {
+		if err := NocanClient.DispatchEvents(); err != nil {
+			clog.Warning("Dispatch event loop ended on error: %s", err)
+		} else {
+			clog.Warning("Dispatch event loop ended without reporting an error.")
+		}
+	}()
 	mux = NewServeMux()
 
 	static_files = packr.New("static", "./assets/static")

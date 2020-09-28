@@ -69,7 +69,7 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 
 func WebuiFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
-	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
+	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Listening address and port of web server (e.g. '0.0.0.0:8080')")
 	fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
 	return fs
 }
@@ -105,7 +105,7 @@ func monitor_cmd(fs *flag.FlagSet) error {
 	nocan_client := helper.NewNocanClient()
 
 	callback := func(conn *socket.EventConn, event socket.Eventer) error {
-		fmt.Println(event)
+		fmt.Printf("%s(%d)\t%s\r\n", event.Id(), event.Id(), event)
 		return nil
 	}
 
@@ -136,11 +136,11 @@ func publish_cmd(fs *flag.FlagSet) error {
 	channelValue := args[1]
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	if err := nocan_client.Connect(); err != nil {
 		return err
 	}
+	defer nocan_client.Close()
 	return nocan_client.Send(socket.NewChannelUpdateEvent(channelName, 0xFFFF, socket.CHANNEL_UPDATED, []byte(channelValue)))
 }
 
@@ -213,7 +213,6 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	/**************************/
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	/*************************/
 	/* Setup MQTT connection */
@@ -260,7 +259,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			if mapping, ok := channel_sub[topic]; ok {
 				svalue := new(bytes.Buffer)
 				if err = mapping.Transform.Execute(svalue, tv); err != nil {
-					clog.Warning("Failed to transform value of topic '%s' for MQTT subscription, %s", tv.Topic)
+					clog.Warning("Failed to transform value of topic '%s' for MQTT subscription: %s", tv.Topic, err)
 				} else {
 					if err := nocan_client.Send(socket.NewChannelUpdateEvent(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes())); err != nil {
 						clog.Warning("Failed to send %d byte message for NoCAN channel '%s': %s", svalue.Len(), mapping.Target, err)
@@ -313,7 +312,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			if mapping, ok := channel_pub[cu.ChannelName]; ok {
 				value := new(bytes.Buffer)
 				if err = mapping.Transform.Execute(value, cu); err != nil {
-					clog.Warning("Failed to transform value of channel '%s' for MQTT publication, %s", cu.ChannelName)
+					clog.Warning("Failed to transform value of channel '%s' for MQTT publication: %s", cu.ChannelName, err)
 				} else {
 					if err = mqtt.Publish(mapping.Target, value.Bytes()); err != nil {
 						clog.Warning("Failed to publish %d bytes from channel '%s' to topic '%s': %s", len(cu.Value), cu.ChannelName, mapping.Target, err)
@@ -332,11 +331,10 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 
 func list_channels_cmd(fs *flag.FlagSet) error {
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnEvent(socket.ChannelListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		cl := e.(*socket.ChannelListEvent)
-		clog.Debug("Listing %d channels.", len(cl.Channels))
+		fmt.Printf("# Listing %d channels.\n", len(cl.Channels))
 		fmt.Println(cl)
 		return socket.Terminate
 	})
@@ -349,11 +347,10 @@ func list_channels_cmd(fs *flag.FlagSet) error {
 
 func list_nodes_cmd(fs *flag.FlagSet) error {
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		nl := e.(*socket.NodeListEvent)
-		clog.Debug("Listing %d nodes.", len(nl.Nodes))
+		fmt.Printf("# Listing %d nodes.\n", len(nl.Nodes))
 		fmt.Println(nl)
 		return socket.Terminate
 	})
@@ -370,7 +367,6 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 	sync_mode := false
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnEvent(socket.NodeUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		if sync_mode {
@@ -385,7 +381,7 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 	})
 
 	nocan_client.OnEvent(socket.NodeListEventId, func(conn *socket.EventConn, e socket.Eventer) error {
-		if sync_mode {
+		if !sync_mode {
 			nl := e.(*socket.NodeListEvent)
 			json, err := helper.GenerateArduinoDiscoveryNodeList(nl)
 			if err != nil {
@@ -396,33 +392,36 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 		return nil
 	})
 
-	for {
-		fmt.Scanln(&input)
+	go func() {
+		for {
+			fmt.Scanln(&input)
 
-		switch input {
-		case "START_SYNC":
-			sync_mode = true
-		case "START":
-			// do nothing
-			continue
-		case "STOP":
-			sync_mode = false
-			return nil
-		case "LIST":
-			sync_mode = false
-			if err := nocan_client.Send(socket.NewNodeListRequestEvent()); err != nil {
-				return err
+			switch input {
+			case "START_SYNC":
+				sync_mode = true
+			case "START":
+				// do nothing
+				continue
+			case "STOP":
+				sync_mode = false
+				nocan_client.AutoRedial = false
+				nocan_client.Close()
+				break
+			case "LIST":
+				sync_mode = false
+				if err := nocan_client.Send(socket.NewNodeListRequestEvent()); err != nil {
+					break
+				}
+			default:
+				fmt.Println(helper.ArduinoDiscoverError(input + " not supported"))
 			}
-		default:
-			fmt.Println(helper.ArduinoDiscoverError(input + " not supported"))
 		}
-	}
+	}()
 	return nocan_client.DispatchEvents()
 }
 
 func device_info_cmd(fs *flag.FlagSet) error {
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnEvent(socket.DeviceInformationEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		di := e.(*socket.DeviceInformationEvent)
@@ -446,7 +445,6 @@ func read_channel_cmd(fs *flag.FlagSet) error {
 	channelName := args[0]
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnEvent(socket.ChannelUpdateEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		cu := e.(*socket.ChannelUpdateEvent)
@@ -499,7 +497,6 @@ func upload_cmd(fs *flag.FlagSet) error {
 	}
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	nocan_client.OnConnect(func(conn *socket.EventConn) error {
 		return conn.Send(upload_request)
@@ -550,7 +547,6 @@ func download_cmd(fs *flag.FlagSet) error {
 	defer file.Close()
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	download_request := socket.NewNodeFirmwareEvent(nocan.NodeId(nodeid)).ConfigureAsDownload()
 	download_request.Limit = uint32(config.Settings.DownloadSizeLimit)
@@ -616,11 +612,11 @@ func reboot_cmd(fs *flag.FlagSet) error {
 	}
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	if err := nocan_client.Connect(); err != nil {
 		return err
 	}
+	defer nocan_client.Close()
 
 	return nocan_client.Send(socket.NewNodeRebootRequestEvent(nocan.NodeId(nodeid), forceFlag))
 }
@@ -644,11 +640,11 @@ func power_cmd(fs *flag.FlagSet) error {
 	}
 
 	nocan_client := helper.NewNocanClient()
-	defer nocan_client.Close()
 
 	if err := nocan_client.Connect(); err != nil {
 		return err
 	}
+	defer nocan_client.Close()
 
 	return nocan_client.Send(socket.NewBusPowerEvent(expect))
 }
@@ -695,14 +691,12 @@ func help_cmd(fs *flag.FlagSet) error {
 
 	if len(xargs) == 0 {
 
-		fmt.Printf("Usage:\r\n")
 		fmt.Println(Commands.Usage())
-
+		fmt.Println("Type 'nocanc help [command]' for help on a particular command.")
 	} else {
 		if len(xargs) == 1 {
 			c := Commands.Find(xargs[0])
 			if c != nil {
-				fmt.Printf("Usage:\r\n")
 				fmt.Println(c.Usage())
 			} else {
 				fmt.Printf("Unknonwn command '%s'.\r\n", xargs[0])
@@ -719,20 +713,20 @@ func help_cmd(fs *flag.FlagSet) error {
 }
 
 var Commands = helpers.CommandFlagSetList{
-	{"arduino-discovery", arduino_discovery_cmd, BaseFlagSet, "arduino-discovery [options]", "For Arduino IDE"},
-	{"blynk", blynk_cmd, BlynkFlagSet, "blynk [options]", "Connect to a blynk server (see https://www.blynk.cc/)"},
-	{"device-info", device_info_cmd, BaseFlagSet, "device-info [options]", "Get information about the device/hardware."},
-	{"download", download_cmd, DownloadFlagSet, "download [options] <filename> <node_id>", "Download firmware from node"},
+	{"arduino-discovery", arduino_discovery_cmd, BaseFlagSet, "arduino-discovery [flags]", "Used by the Arduino IDE for node discovery"},
+	{"blynk", blynk_cmd, BlynkFlagSet, "blynk [flags]", "Connect to a blynk server (see https://www.blynk.cc/)"},
+	{"device-info", device_info_cmd, BaseFlagSet, "device-info [flags]", "Get information about the device/hardware."},
+	{"download", download_cmd, DownloadFlagSet, "download [flags] <filename> <node_id>", "Download the firmware from a selected node"},
 	{"help", nil, EmptyFlagSet, "help <command>", "Provide help about a command, or general help if no command is specified"},
-	{"list-channels", list_channels_cmd, BaseFlagSet, "list-channels [options]", "List all channels"},
-	{"list-nodes", list_nodes_cmd, BaseFlagSet, "list-nodes [options]", "List all nodes"},
-	{"monitor", monitor_cmd, BaseFlagSet, "monitor [options] <eid1> <eid2> ...", "Monitor selected by eid, or all events if no eid specified"},
-	{"mqtt", mqtt_cmd, MqttFlagSet, "mqtt [options]", "Connect to a mqtt server, translating NoCAN channels to MQTT topics."},
-	{"power", power_cmd, BaseFlagSet, "power [options] <on|off>", "power on or off the NoCAN bus"},
-	{"publish", publish_cmd, BaseFlagSet, "publish [options] <channel_name> <value>", "Publish <value> to <channel_name>"},
-	{"read-channel", read_channel_cmd, ReadChannelFlagSet, "read-channel [options] <channel_name>", "Read the content of a channel"},
-	{"reboot", reboot_cmd, RebootFlagSet, "reboot [options] <node_id>", "Reboot node"},
-	{"upload", upload_cmd, BaseFlagSet, "upload [options] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
+	{"list-channels", list_channels_cmd, BaseFlagSet, "list-channels [flags]", "List all channels"},
+	{"list-nodes", list_nodes_cmd, BaseFlagSet, "list-nodes [flags]", "List all nodes"},
+	{"monitor", monitor_cmd, BaseFlagSet, "monitor [flags] <eid1> <eid2> ...", "Monitor selected events by eid (event id), or all events if no eid specified"},
+	{"mqtt", mqtt_cmd, MqttFlagSet, "mqtt [flags]", "Connect to a mqtt server, translating NoCAN channels to MQTT topics."},
+	{"power", power_cmd, BaseFlagSet, "power [flags] <on|off>", "power on or off the NoCAN bus"},
+	{"publish", publish_cmd, BaseFlagSet, "publish [flags] <channel_name> <value>", "Publish <value> to <channel_name>"},
+	{"read-channel", read_channel_cmd, ReadChannelFlagSet, "read-channel [flags] <channel_name>", "Read the content of a channel"},
+	{"reboot", reboot_cmd, RebootFlagSet, "reboot [flags] <node_id>", "Reboot node"},
+	{"upload", upload_cmd, BaseFlagSet, "upload [flags] <filename> <node_id>", "Upload firmware (intel hex file) to node"},
 	{"version", version_cmd, VersionFlagSet, "version", "display the version"},
 	{"webui", webui_cmd, WebuiFlagSet, "webui", "Run web interface"},
 }

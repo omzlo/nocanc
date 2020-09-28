@@ -73,8 +73,8 @@ func GenerateArduinoDiscoveryNodeList(list *socket.NodeListEvent) (string, error
 
 func createArduinoPort(node *socket.NodeUpdateEvent) ArduinoPort {
 	return ArduinoPort{
-		Address:       fmt.Sprintf("%d", node.Id),
-		Label:         fmt.Sprintf("node %d [%s]", node.Id, node.Udid),
+		Address:       fmt.Sprintf("%d", node.NodeId),
+		Label:         fmt.Sprintf("node %d [%s]", node.NodeId, node.Udid),
 		BoardName:     "Omzlo CANZERO",
 		Protocol:      "nocan",
 		ProtocolLabel: "NoCAN Nodes",

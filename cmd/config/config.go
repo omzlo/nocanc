@@ -57,7 +57,7 @@ func (bl BlynkMap) String() string {
 	var s []string
 
 	for _, item := range bl {
-		s = append(s, fmt.Sprintf("%i::%s", item.Pin, item.Channel))
+		s = append(s, fmt.Sprintf("%d::%s", item.Pin, item.Channel))
 	}
 	return strings.Join(s, ",")
 }

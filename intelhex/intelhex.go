@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"encoding/hex"
 	"fmt"
-	"github.com/omzlo/nocand/clog"
+	"github.com/omzlo/clog"
 	"io"
 )
 
