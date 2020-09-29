@@ -388,17 +388,35 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 				return err
 			}
 			fmt.Println(json)
+		} else {
+			nl := e.(*socket.NodeListEvent)
+			for _, nu := range nl.Nodes {
+				json, err := helper.GenerateArduinoDiscoveryNodeUpdate(nu)
+				if err != nil {
+					return err
+				}
+				fmt.Println(json)
+			}
 		}
 		return nil
 	})
 
+	if err := nocan_client.Connect(); err != nil {
+		return err
+	}
+
 	go func() {
 		for {
 			fmt.Scanln(&input)
+			clog.DebugXX("Arduino IDE sent '%s'", input)
 
 			switch input {
 			case "START_SYNC":
 				sync_mode = true
+				if err := nocan_client.Send(socket.NewNodeListRequestEvent()); err != nil {
+					clog.Error("Failed to send NodeListRequestEvent: %s", err)
+					break
+				}
 			case "START":
 				// do nothing
 				continue
@@ -410,6 +428,7 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 			case "LIST":
 				sync_mode = false
 				if err := nocan_client.Send(socket.NewNodeListRequestEvent()); err != nil {
+					clog.Error("Failed to send NodeListRequestEvent: %s", err)
 					break
 				}
 			default:

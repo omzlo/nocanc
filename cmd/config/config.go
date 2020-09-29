@@ -179,7 +179,7 @@ type Configuration struct {
 	CheckForUpdates   bool              `toml:"check-for-updates"`
 	UpdateUrl         string            `toml:"update-url"`
 	LogTerminal       string            `toml:"log-terminal"`
-	LogLevel          clog.LogLevel     `toml:"log-verbosity"`
+	LogLevel          clog.LogLevel     `toml:"log-level"`
 	LogFile           *helpers.FilePath `toml:"log-file"`
 	OnUpdate          bool              `toml:"on-update"`
 }
