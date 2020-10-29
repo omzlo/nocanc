@@ -29,7 +29,7 @@ import (
 var (
 	NOCANC_VERSION string = "Undefined"
 	dummy          string
-    forceFlag      bool = false
+	forceFlag      bool = false
 )
 
 func EmptyFlagSet(cmd string) *flag.FlagSet {
@@ -70,8 +70,8 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 func WebuiFlagSet(cmd string) *flag.FlagSet {
 	fs := BaseFlagSet(cmd)
 	fs.StringVar(&config.Settings.Webui.WebServer, "web-server", config.Settings.Webui.WebServer, "Local address of server (e.g. localhost:8080)")
-    fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
-    return fs
+	fs.UintVar(&config.Settings.Webui.Refresh, "refresh", config.Settings.Webui.Refresh, "Refresh rate of web UI in milliseconds (e.g. 5000)")
+	return fs
 }
 
 func DownloadFlagSet(cmd string) *flag.FlagSet {
@@ -94,11 +94,10 @@ func ReadChannelFlagSet(cmd string) *flag.FlagSet {
 }
 
 func RebootFlagSet(cmd string) *flag.FlagSet {
-    fs := BaseFlagSet(cmd)
-    fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
-    return fs
+	fs := BaseFlagSet(cmd)
+	fs.BoolVar(&forceFlag, "force", false, "Force sending reboot request even if the node does not exist.")
+	return fs
 }
-
 
 /***/
 
@@ -737,24 +736,24 @@ func download_cmd(fs *flag.FlagSet) error {
 }
 
 func reboot_cmd(fs *flag.FlagSet) error {
-    xargs := fs.Args()
-    if len(xargs) != 1 {
-        return fmt.Errorf("Expected one parameter: a numerical node identifier.")
-    }
+	xargs := fs.Args()
+	if len(xargs) != 1 {
+		return fmt.Errorf("Expected one parameter: a numerical node identifier.")
+	}
 
-    nodeid, err := strconv.Atoi(xargs[0])
+	nodeid, err := strconv.Atoi(xargs[0])
 
-    if err != nil {
-        return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
-    }
+	if err != nil {
+		return fmt.Errorf("Expected a numerical node identifier, got '%s' instead.", xargs[0])
+	}
 
-    // Carefull to use xerr and not err
-    xerr := client.RebootNode(nodeid, forceFlag)
-    if xerr != nil {
-        return xerr
-    }
-    fmt.Println("OK")
-    return nil
+	// Carefull to use xerr and not err
+	xerr := client.RebootNode(nodeid, forceFlag)
+	if xerr != nil {
+		return xerr
+	}
+	fmt.Println("OK")
+	return nil
 }
 
 func power_cmd(fs *flag.FlagSet) error {
