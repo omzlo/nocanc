@@ -158,6 +158,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		blynk_client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
+				clog.Info("blynk virtual pin '%d' caused channel update on '%s' with value %q", vpin, cu.ChannelName, cu.Value)
 				nocan_client.Send(socket.NewChannelUpdateEvent(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val)))
 			}
 		})
@@ -191,6 +192,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 
 			vpin, ok := channel_to_pin[cu.ChannelName]
 			if ok {
+				clog.Info("Channel '%s' updated to blynk virtual pin '%d', with value %q", cu.ChannelName, vpin, cu.Value)
 				blynk_client.VirtualWrite(vpin, string(cu.Value))
 			}
 			return nil
