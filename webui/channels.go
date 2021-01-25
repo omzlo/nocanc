@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 var ChannelList *socket.ChannelListEvent
@@ -73,7 +74,7 @@ func channels_update(w http.ResponseWriter, req *http.Request, params *Parameter
 		return
 	}
 
-	if err := NocanClient.Send(socket.NewChannelUpdateEvent("", c, socket.CHANNEL_UPDATED, []byte(value.Value))); err != nil {
+	if err := NocanClient.Send(socket.NewChannelUpdateEvent("", c, socket.CHANNEL_UPDATED, []byte(value.Value), time.Now())); err != nil {
 		ErrorSend(w, req, helper.InternalServerError(err))
 		return
 	}

@@ -193,7 +193,7 @@ var DefaultSettings = Configuration{
 		BlynkToken:  "missing-token",
 	},
 	Mqtt: MqttConfiguration{
-		ClientId:   "com.omzlo.mqtt.nocanc",
+		ClientId:   "",
 		MqttServer: "mqtt://localhost",
 	},
 	Webui: WebuiConfiguration{

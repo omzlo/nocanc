@@ -19,6 +19,7 @@
                                <input type="text" name="value" id="new_channel_value" class="u-full-width mono">
                             </form>
                         </td>
+                    <tr><td><b>Updated at</b></td><td id="channel_updated_at" class="mono"></td></tr>
                  </tbody>
             </table>
             <p id="channel_status" class="center-text"></p>
@@ -48,6 +49,7 @@ function update_page() {
             $("#channel_id").html(json.id);
             $("#channel_name").html(json.name);
             $("#channel_value").html(json.value);
+            $("#channel_updated_at").html(json.updated_at);
         })
         .fail(function(xhr, status, err) {
             var json = JSON.parse(xhr.responseText);

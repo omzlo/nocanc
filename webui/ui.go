@@ -117,7 +117,7 @@ func Run(addr string, refresh_rate uint) error {
 		return fmt.Errorf("Webui is already running")
 	}
 
-	NocanClient := helper.NewNocanClient()
+	NocanClient = helper.NewNocanClient()
 
 	NocanClient.OnEvent(socket.ChannelListEventId, on_channel_list_event)
 	NocanClient.OnEvent(socket.ChannelUpdateEventId, on_channel_update_event)
@@ -147,7 +147,7 @@ func Run(addr string, refresh_rate uint) error {
 	})
 
 	go func() {
-		if err := NocanClient.DispatchEvents(); err != nil {
+		if err := NocanClient.EnableAutoRedial().DispatchEvents(); err != nil {
 			clog.Warning("Dispatch event loop ended on error: %s", err)
 		} else {
 			clog.Warning("Dispatch event loop ended without reporting an error.")

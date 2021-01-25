@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/omzlo/nocanc/helper"
 	"github.com/omzlo/nocanc/intelhex"
+	"github.com/omzlo/nocand/models"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
 	"net/http"
@@ -22,13 +23,17 @@ func on_node_update_event(conn *socket.EventConn, e socket.Eventer) error {
 	if NodeList == nil {
 		NodeList = socket.NewNodeListEvent()
 	}
-	for i, node := range NodeList.Nodes {
-		if node.NodeId == nu.NodeId {
-			NodeList.Nodes[i] = nu
-			return nil
+	if nu.State == models.NodeStateUnresponsive {
+		NodeList.Exclude(nu.NodeId)
+	} else {
+		for i, node := range NodeList.Nodes {
+			if node.NodeId == nu.NodeId {
+				NodeList.Nodes[i] = nu
+				return nil
+			}
 		}
+		NodeList.Append(nu)
 	}
-	NodeList.Append(nu)
 	return nil
 }
 

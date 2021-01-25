@@ -141,7 +141,7 @@ func publish_cmd(fs *flag.FlagSet) error {
 		return err
 	}
 	defer nocan_client.Close()
-	return nocan_client.Send(socket.NewChannelUpdateEvent(channelName, 0xFFFF, socket.CHANNEL_UPDATED, []byte(channelValue)))
+	return nocan_client.Send(socket.NewChannelUpdateEvent(channelName, 0xFFFF, socket.CHANNEL_UPDATED, []byte(channelValue), time.Now()))
 }
 
 func blynk_cmd(fs *flag.FlagSet) error {
@@ -158,8 +158,8 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		blynk_client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
-				clog.Info("blynk virtual pin '%d' caused channel update on '%s' with value %q", vpin, cu.ChannelName, cu.Value)
-				nocan_client.Send(socket.NewChannelUpdateEvent(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val)))
+				clog.Info("blynk virtual pin '%d' caused update on channel %d with value %q", pin, writer.Channel, val)
+				nocan_client.Send(socket.NewChannelUpdateEvent(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val), time.Now()))
 			}
 		})
 	}
@@ -199,7 +199,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		})
 	}
 
-	go nocan_client.DispatchEvents()
+	go nocan_client.EnableAutoRedial().DispatchEvents()
 	return blynk_client.RunEventLoop()
 }
 
@@ -219,6 +219,10 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	/*************************/
 	/* Setup MQTT connection */
 	/*************************/
+
+	if config.Settings.Mqtt.ClientId == "" {
+		config.Settings.Mqtt.ClientId = fmt.Sprintf("com.omzlo.nocanc-%d", os.Getpid())
+	}
 
 	mqtt, err := gomqtt_mini_client.NewMqttClient(config.Settings.Mqtt.ClientId, config.Settings.Mqtt.MqttServer)
 	if err != nil {
@@ -244,7 +248,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 				clog.Fatal("Invalid MQTT transformation for topic '%s' subscription, %s", subs.Topic, err)
 			}
 			channel_sub[subs.Topic] = mqtt_mapping{subs.Channel, template}
-			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription'", subs.Topic, subs.Channel)
+			clog.Debug("Mapping MQTT topic '%s' to NoCAN channel '%s' for subscription", subs.Topic, subs.Channel)
 		}
 
 		// SubscribeCallback is the function that gets called when data is published on a MQTT channel
@@ -263,7 +267,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 				if err = mapping.Transform.Execute(svalue, tv); err != nil {
 					clog.Warning("Failed to transform value of topic '%s' for MQTT subscription: %s", tv.Topic, err)
 				} else {
-					if err := nocan_client.Send(socket.NewChannelUpdateEvent(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes())); err != nil {
+					if err := nocan_client.Send(socket.NewChannelUpdateEvent(mapping.Target, 0xFFFF, socket.CHANNEL_UPDATED, svalue.Bytes(), time.Now())); err != nil {
 						clog.Warning("Failed to send %d byte message for NoCAN channel '%s': %s", svalue.Len(), mapping.Target, err)
 					}
 				}
@@ -277,7 +281,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 		mqtt.OnConnect = func(client *gomqtt_mini_client.MqttClient) {
 			for _, subs := range config.Settings.Mqtt.Subscribers {
 				client.Subscribe(subs.Topic)
-				clog.Debug("Subscribed to MQTT topic %s", subs.Topic)
+				clog.Info("Subscribed to MQTT topic %s", subs.Topic)
 			}
 		}
 	}
@@ -327,8 +331,8 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			return nil
 		})
 	}
-	go nocan_client.DispatchEvents()
-	return mqtt.RunEventLoop()
+	go mqtt.RunEventLoop()
+	return nocan_client.EnableAutoRedial().DispatchEvents()
 }
 
 func list_channels_cmd(fs *flag.FlagSet) error {
@@ -438,7 +442,7 @@ func arduino_discovery_cmd(fs *flag.FlagSet) error {
 			}
 		}
 	}()
-	return nocan_client.DispatchEvents()
+	return nocan_client.EnableAutoRedial().DispatchEvents()
 }
 
 func device_info_cmd(fs *flag.FlagSet) error {
@@ -832,6 +836,7 @@ func main() {
 
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "# 'nocanc %s' failed, %s\r\n", command.Command, err)
+			clog.Terminate(1)
 		}
 	}
 	clog.Terminate(0)
