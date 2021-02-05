@@ -45,6 +45,7 @@ func BaseFlagSet(cmd string) *flag.FlagSet {
 	fs.Var(&config.Settings.LogLevel, "log-level", "Log verbosity level (DEBUGXX, DEBUGX, DEBUG, INFO, WARNING, ERROR or NONE)")
 	fs.StringVar(&config.Settings.LogTerminal, "log-terminal", config.Settings.LogTerminal, "Log info on the terminal screen (color, plain, none)")
 	fs.Var(config.Settings.LogFile, "log-file", "Name of file where logs are stored. Empty value dissables the log file (default is '').")
+	fs.BoolVar(&config.Settings.SimpleProgressBar, "simple-progress-bar", false, "Display a simple progress bar during firmware uploads.")
 	return fs
 }
 
@@ -158,7 +159,7 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		blynk_client.RegisterDeviceWriterFunction(writer.Pin, func(pin uint, body blynk.Body) {
 			val, ok := body.AsString(0)
 			if ok {
-				clog.Info("blynk virtual pin '%d' caused update on channel %d with value %q", pin, writer.Channel, val)
+				clog.Info("blynk virtual pin '%d' caused update on channel %s with value %q", pin, writer.Channel, val)
 				nocan_client.Send(socket.NewChannelUpdateEvent(writer.Channel, 0xFFFF, socket.CHANNEL_UPDATED, []byte(val), time.Now()))
 			}
 		})
@@ -199,6 +200,9 @@ func blynk_cmd(fs *flag.FlagSet) error {
 		})
 	}
 
+	if err := nocan_client.Connect(); err != nil {
+		return err
+	}
 	go nocan_client.EnableAutoRedial().DispatchEvents()
 	return blynk_client.RunEventLoop()
 }
@@ -330,6 +334,9 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			}
 			return nil
 		})
+	}
+	if err := nocan_client.Connect(); err != nil {
+		return err
 	}
 	go mqtt.RunEventLoop()
 	return nocan_client.EnableAutoRedial().DispatchEvents()
@@ -532,17 +539,21 @@ func upload_cmd(fs *flag.FlagSet) error {
 		np := e.(*socket.NodeFirmwareProgressEvent)
 		switch np.Progress {
 		case socket.ProgressSuccess:
-			fmt.Printf("\nDone\n")
+			fmt.Printf("\nDone, uploaded %d bytes in %.1f seconds.\n", np.BytesTransferred, time.Since(start).Seconds())
 			return socket.Terminate
 		case socket.ProgressFailed:
 			fmt.Printf("\nFailed\n")
 			return fmt.Errorf("Upload failed")
 		default:
-			dur := uint32(time.Since(start).Seconds())
-			if dur == 0 {
-				dur = 1
+			if config.Settings.SimpleProgressBar {
+				fmt.Print(".")
+			} else {
+				dur := uint32(time.Since(start).Seconds())
+				if dur == 0 {
+					dur = 1
+				}
+				fmt.Printf("\rProgress: %d%%, %d bytes, %d bps.", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
 			}
-			fmt.Printf("\rProgress: %d%%, %d bytes, %d bps.", np.Progress, np.BytesTransferred, 8*np.BytesTransferred/dur)
 		}
 		return nil
 	})

@@ -182,6 +182,7 @@ type Configuration struct {
 	LogLevel          clog.LogLevel     `toml:"log-level"`
 	LogFile           *helpers.FilePath `toml:"log-file"`
 	OnUpdate          bool              `toml:"on-update"`
+	SimpleProgressBar bool              `toml:"simple-progress-bar"`
 }
 
 var DefaultSettings = Configuration{
@@ -200,12 +201,13 @@ var DefaultSettings = Configuration{
 		WebServer: "localhost:8080",
 		Refresh:   5000,
 	},
-	CheckForUpdates: true,
-	UpdateUrl:       "https://www.omzlo.com/software_update",
-	LogLevel:        clog.INFO,
-	LogTerminal:     "plain",
-	LogFile:         helpers.NewFilePath(),
-	OnUpdate:        false,
+	CheckForUpdates:   true,
+	UpdateUrl:         "https://www.omzlo.com/software_update",
+	LogLevel:          clog.INFO,
+	LogTerminal:       "plain",
+	LogFile:           helpers.NewFilePath(),
+	OnUpdate:          false,
+	SimpleProgressBar: false,
 }
 
 var Settings = DefaultSettings
