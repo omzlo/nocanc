@@ -538,6 +538,7 @@ func upload_cmd(fs *flag.FlagSet) error {
 		return conn.Send(upload_request)
 	})
 
+	fmt.Println("Starting upload.")
 	start := time.Now()
 	nocan_client.OnEvent(socket.NodeFirmwareProgressEventId, func(conn *socket.EventConn, e socket.Eventer) error {
 		np := e.(*socket.NodeFirmwareProgressEvent)
