@@ -319,6 +319,10 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 			}
 			cu := e.(*socket.ChannelUpdateEvent)
 
+			if cu.Status != socket.CHANNEL_UPDATED {
+				return nil
+			}
+
 			if mapping, ok := channel_pub[cu.ChannelName]; ok {
 				value := new(bytes.Buffer)
 				if err = mapping.Transform.Execute(value, cu); err != nil {
