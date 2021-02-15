@@ -236,6 +236,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	/**************************/
 	/* Setup MQTT subscribers */
 	/**************************/
+	lost_connection := false
 
 	if len(config.Settings.Mqtt.Subscribers) > 0 {
 		channel_sub := make(map[string]mqtt_mapping)
@@ -259,6 +260,14 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 		// we transfer the data to a NoCAN channel, using channel_sub as a mapping.
 
 		mqtt.SubscribeCallback = func(topic string, value []byte) {
+			if !nocan_client.Connected {
+				if !lost_connection {
+					clog.Warning("Connection to nocand has been interrupted, mqtt message forwarding is dissabled until connection is restored.")
+					lost_connection = true
+				}
+				return
+			}
+
 			tv := struct {
 				Topic string
 				Value []byte
@@ -283,6 +292,7 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 		// We make sure our MQTT client is subscribed to the relevant topics
 		// We only do this once connected, hence the "OnConnect"
 		mqtt.OnConnect = func(client *gomqtt_mini_client.MqttClient) {
+			lost_connection = false
 			for _, subs := range config.Settings.Mqtt.Subscribers {
 				client.Subscribe(subs.Topic)
 				clog.Info("Subscribed to MQTT topic %s", subs.Topic)
