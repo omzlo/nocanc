@@ -147,7 +147,7 @@ func Run(addr string, refresh_rate uint) error {
 	})
 
 	go func() {
-		if err := NocanClient.EnableAutoRedial().DispatchEvents(); err != nil {
+		if err := NocanClient.EnableAutoRedial().Connect(); err != nil {
 			clog.Warning("Dispatch event loop ended on error: %s", err)
 		} else {
 			clog.Warning("Dispatch event loop ended without reporting an error.")

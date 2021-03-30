@@ -186,9 +186,7 @@ func UploadFirmware(conn *socket.EventConn, nodeId nocan.NodeId, firmware *intel
 		}
 	}
 
-	if err := conn.Send(upload_request); err != nil {
-		return nil, InternalServerError(err)
-	}
+	conn.SendAsync(upload_request, socket.ReturnErrorOrContinue)
 
 	job := DefaultJobManager.NewJob(updater)
 
