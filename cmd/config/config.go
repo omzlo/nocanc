@@ -158,10 +158,13 @@ type BlynkConfiguration struct {
 }
 
 type MqttConfiguration struct {
-	ClientId    string  `toml:"client-id"`
-	MqttServer  string  `toml:"mqtt-server"`
-	Publishers  MqttMap `toml:"publishers"`
-	Subscribers MqttMap `toml:"subscribers"`
+	ClientId       string  `toml:"client-id"`
+	MqttServer     string  `toml:"mqtt-server"`
+	Publishers     MqttMap `toml:"publishers"`
+	Subscribers    MqttMap `toml:"subscribers"`
+	CAFile         string  `toml:"ca-file"`
+	ClientKeyFile  string  `toml:"client-key-file"`
+	ClientCertFile string  `toml:"client-cert-file"`
 }
 
 type WebuiConfiguration struct {
@@ -194,8 +197,11 @@ var DefaultSettings = Configuration{
 		BlynkToken:  "missing-token",
 	},
 	Mqtt: MqttConfiguration{
-		ClientId:   "",
-		MqttServer: "mqtt://localhost",
+		ClientId:       "",
+		MqttServer:     "mqtt://localhost",
+		CAFile:         "",
+		ClientKeyFile:  "",
+		ClientCertFile: "",
 	},
 	Webui: WebuiConfiguration{
 		WebServer: "localhost:8080",

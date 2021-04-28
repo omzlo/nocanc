@@ -12,9 +12,12 @@ import (
 	"github.com/omzlo/nocanc/intelhex"
 	"github.com/omzlo/nocanc/webui"
 	//"github.com/omzlo/nocand/models/device"
+	"crypto/tls"
+	"crypto/x509"
 	"github.com/omzlo/nocand/models/helpers"
 	"github.com/omzlo/nocand/models/nocan"
 	"github.com/omzlo/nocand/socket"
+	"io/ioutil"
 	"os"
 	"path"
 	"runtime"
@@ -75,6 +78,9 @@ func MqttFlagSet(cmd string) *flag.FlagSet {
 	fs.StringVar(&config.Settings.Mqtt.ClientId, "client-id", config.Settings.Mqtt.ClientId, "MQTT client identifier")
 	fs.Var(&config.Settings.Mqtt.Publishers, "publishers", "List of channels to publish to the mqtt server")
 	fs.Var(&config.Settings.Mqtt.Subscribers, "subscribers", "List of topics to subscribe from the mqtt server")
+	fs.StringVar(&config.Settings.Mqtt.CAFile, "ca-file", config.Settings.Mqtt.CAFile, "Root CA file to use for TLS security, leave blank to use the operating system default CA files.")
+	fs.StringVar(&config.Settings.Mqtt.ClientKeyFile, "client-key-file", config.Settings.Mqtt.ClientKeyFile, "Client key file to use for TLS mutual authentication, leave blank to disable client public key authentication.")
+	fs.StringVar(&config.Settings.Mqtt.ClientCertFile, "client-cert-file", config.Settings.Mqtt.ClientCertFile, "Client certificate file to use for TLS mutual authentication, leave blank to disable client public key authentication.")
 	return fs
 }
 
@@ -242,6 +248,29 @@ func mqtt_cmd(fs *flag.FlagSet) error {
 	mqtt, err := gomqtt_mini_client.NewMqttClient(config.Settings.Mqtt.ClientId, config.Settings.Mqtt.MqttServer)
 	if err != nil {
 		return err
+	}
+
+	if config.Settings.Mqtt.CAFile != "" {
+		ca_cert, err := ioutil.ReadFile(config.Settings.Mqtt.CAFile)
+		if err != nil {
+			return err
+		}
+		ca_cert_pool := x509.NewCertPool()
+		if ca_cert_pool.AppendCertsFromPEM(ca_cert) {
+			mqtt.TLSConfig.RootCAs = ca_cert_pool
+			clog.Info("Using root certificate file %s (%d bytes)", config.Settings.Mqtt.CAFile, len(ca_cert))
+		} else {
+			clog.Warning("Could not use root certificate file %s (%d bytes)", config.Settings.Mqtt.CAFile, len(ca_cert))
+		}
+	}
+
+	if config.Settings.Mqtt.ClientKeyFile != "" && config.Settings.Mqtt.ClientCertFile != "" {
+		cert, err := tls.LoadX509KeyPair(config.Settings.Mqtt.ClientCertFile, config.Settings.Mqtt.ClientKeyFile)
+		if err != nil {
+			return err
+		}
+		mqtt.TLSConfig.Certificates = []tls.Certificate{cert}
+		clog.Info("Using client-side public key authentication with %s and %s", config.Settings.Mqtt.ClientCertFile, config.Settings.Mqtt.ClientKeyFile)
 	}
 
 	/**************************/
