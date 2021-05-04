@@ -146,13 +146,11 @@ func Run(addr string, refresh_rate uint) error {
 		return nil
 	})
 
-	go func() {
-		if err := NocanClient.EnableAutoRedial().Connect(); err != nil {
-			clog.Warning("Dispatch event loop ended on error: %s", err)
-		} else {
-			clog.Warning("Dispatch event loop ended without reporting an error.")
-		}
-	}()
+	if err := NocanClient.EnableAutoRedial().Connect(); err != nil {
+		return err
+	}
+	defer NocanClient.Terminate()
+
 	mux = NewServeMux()
 
 	static_files = packr.New("static", "./assets/static")

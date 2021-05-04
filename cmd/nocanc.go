@@ -924,6 +924,7 @@ func main() {
 		err = command.Processor(fs)
 
 		if err != nil {
+			clog.Debug("command returned error: %s", err)
 			fmt.Fprintf(os.Stderr, "# 'nocanc %s' failed, %s\r\n", command.Command, err)
 			clog.Terminate(1)
 		}
